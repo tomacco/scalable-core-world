@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ivan Gonzalez — Tiny Worlds</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;0,9..144,900;1,9..144,300;1,9..144,600&family=Karla:ital,wght@0,300;0,400;0,600;1,300&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --paper: #f6f1e7;
+    --paper-deep: #ece4d3;
+    --ink: #211c15;
+    --ink-soft: #6b6152;
+    --clay: #c4552d;
+    --moss: #4a6741;
+    --rule: rgba(33, 28, 21, 0.18);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--paper); color: var(--ink);
+    font-family: 'Karla', sans-serif; font-weight: 300;
+    line-height: 1.75; overflow-x: hidden;
+  }
+  body::before {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 10; opacity: 0.35;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0.55 0 0 0 0 0.5 0 0 0 0 0.42 0 0 0 0.045 0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .frame { max-width: 1060px; margin: 0 auto; padding: 0 clamp(20px, 5vw, 64px); }
+
+  /* ---------- masthead ---------- */
+  header { padding: 26px 0 18px; display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid var(--ink); }
+  .brand { font-family: 'Fraunces', serif; font-weight: 900; font-size: 15px; letter-spacing: 0.05em; }
+  .brand span { color: var(--clay); }
+  .coords { font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink-soft); }
+
+  /* ---------- hero ---------- */
+  .hero { padding: clamp(60px, 12vh, 130px) 0 60px; position: relative; }
+  .hero .kicker {
+    font-size: 12px; letter-spacing: 0.34em; text-transform: uppercase; color: var(--clay);
+    margin-bottom: 26px; display: flex; align-items: center; gap: 14px;
+  }
+  .hero .kicker::before { content: ''; width: 44px; height: 1px; background: var(--clay); }
+  h1 {
+    font-family: 'Fraunces', serif; font-weight: 300; font-size: clamp(44px, 8vw, 96px);
+    line-height: 1.04; letter-spacing: -0.015em; max-width: 11ch;
+  }
+  h1 em { font-style: italic; font-weight: 600; color: var(--clay); }
+  .hero .standfirst {
+    margin-top: 34px; max-width: 46ch; font-size: 17px; color: var(--ink-soft);
+  }
+  .hero .orbit {
+    position: absolute; right: -40px; top: 40px; width: clamp(160px, 24vw, 300px); aspect-ratio: 1;
+    border: 1px solid var(--rule); border-radius: 50%; animation: spin 60s linear infinite;
+  }
+  .hero .orbit::after {
+    content: ''; position: absolute; top: -7px; left: 50%; width: 14px; height: 14px; border-radius: 50%;
+    background: var(--clay);
+  }
+  .hero .orbit .core {
+    position: absolute; inset: 30%; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, var(--moss), #2c4128 65%, #1c2b1a);
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---------- sections ---------- */
+  section { padding: 58px 0; border-top: 1px solid var(--rule); }
+  .section-grid { display: grid; grid-template-columns: minmax(140px, 220px) 1fr; gap: clamp(20px, 5vw, 80px); }
+  .section-label {
+    font-size: 11px; letter-spacing: 0.3em; text-transform: uppercase; color: var(--ink-soft);
+    padding-top: 8px;
+  }
+  .section-label b { display: block; font-family: 'Fraunces', serif; font-size: 40px; font-weight: 300; color: var(--clay); letter-spacing: 0; margin-bottom: 4px; }
+  h2 { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(24px, 3.4vw, 36px); line-height: 1.2; margin-bottom: 18px; max-width: 20ch; }
+  h2 em { font-style: italic; color: var(--clay); }
+  p + p { margin-top: 1em; }
+  .prose { max-width: 58ch; font-size: 16px; }
+  .prose a { color: var(--clay); text-decoration: none; border-bottom: 1px solid currentColor; transition: opacity .2s; }
+  .prose a:hover { opacity: 0.65; }
+
+  /* ---------- field notes ---------- */
+  .notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 1px; background: var(--rule); border: 1px solid var(--rule); margin-top: 30px; }
+  .note { background: var(--paper); padding: 26px 24px; transition: background .25s; }
+  .note:hover { background: var(--paper-deep); }
+  .note .idx { font-family: 'Fraunces', serif; font-style: italic; font-size: 15px; color: var(--clay); }
+  .note h3 { font-family: 'Fraunces', serif; font-weight: 600; font-size: 18px; margin: 10px 0 8px; }
+  .note p { font-size: 13.5px; color: var(--ink-soft); }
+
+  /* ---------- footer ---------- */
+  footer { border-top: 2px solid var(--ink); margin-top: 40px; padding: 30px 0 60px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+  footer .sig { font-family: 'Fraunces', serif; font-style: italic; font-size: 16px; }
+  footer .meta { font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-soft); }
+
+  /* reveal on load */
+  .hero > *, section, footer { animation: rise 0.9s cubic-bezier(.2,.8,.3,1) both; }
+  .hero .kicker { animation-delay: 0.05s; } h1 { animation-delay: 0.15s; }
+  .hero .standfirst { animation-delay: 0.3s; }
+  @keyframes rise { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: none; } }
+
+  @media (max-width: 640px) { .section-grid { grid-template-columns: 1fr; } .hero .orbit { display: none; } }
+</style>
+</head>
+<body>
+<div class="frame">
+
+  <header>
+    <div class="brand">IVAN <span>GONZALEZ</span></div>
+    <div class="coords">Plot Nº 001 · Scalable Core World</div>
+  </header>
+
+  <div class="hero">
+    <div class="orbit"><div class="core"></div></div>
+    <div class="kicker">Field journal of a settler</div>
+    <h1>Building <em>tiny worlds</em> that scale.</h1>
+    <p class="standfirst">
+      Welcome to my corner of the planet. I founded this little voxel world as a
+      workshop playground for Claude Code — every house here was raised by a
+      contributor and their agent, one plot at a time.
+    </p>
+  </div>
+
+  <section>
+    <div class="section-grid">
+      <div class="section-label"><b>01</b>About</div>
+      <div class="prose">
+        <h2>The person behind <em>the terracotta roof</em></h2>
+        <p>
+          I'm Ivan — engineer, tinkerer, and the founder of this experiment. I like
+          systems that start small and grow without falling over: tiny planets,
+          tidy folder hierarchies, and codebases where a hundred agents can work
+          side by side without stepping on each other.
+        </p>
+        <p>
+          This page is my plot's interior. Replace these words with whatever you
+          love — the world only asks that it be yours.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-grid">
+      <div class="section-label"><b>02</b>The world</div>
+      <div class="prose">
+        <h2>Why a planet, <em>why voxels?</em></h2>
+        <p>
+          Because constraints are generous teachers. A sphere of blocks gives every
+          settler the same gravity, the same sunrise, and a fair patch of land. The
+          rules of settlement live in the repository's <a href="../../../AGENTS.md">AGENTS.md</a> —
+          an agent reads them, interviews its developer, and raises a house in one commit.
+        </p>
+        <div class="notes">
+          <div class="note">
+            <div class="idx">i.</div>
+            <h3>One plot each</h3>
+            <p>Twenty flattened caps on the sphere, assigned in order of arrival. Your land, your rules.</p>
+          </div>
+          <div class="note">
+            <div class="idx">ii.</div>
+            <h3>Agents as builders</h3>
+            <p>Contributors never hand-place voxels. They describe themselves; their agent does the masonry.</p>
+          </div>
+          <div class="note">
+            <div class="idx">iii.</div>
+            <h3>Doors are links</h3>
+            <p>Every front door opens onto a website its owner made about something they love.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-grid">
+      <div class="section-label"><b>03</b>Say hello</div>
+      <div class="prose">
+        <h2>Come <em>knock</em></h2>
+        <p>
+          Find me on GitHub at <a href="https://github.com/tomacco" target="_blank" rel="noopener">@tomacco</a>,
+          or fork the world and claim a plot of your own. The kettle on the stove is
+          always warm — that's why the chimney smokes.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="sig">— Ivan, from plot Nº 001</div>
+    <div class="meta">Scalable Core World · est. 2026</div>
+  </footer>
+
+</div>
+</body>
+</html>

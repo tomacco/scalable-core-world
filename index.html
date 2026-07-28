@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Scalable Core World</title>
+<meta name="description" content="A tiny voxel planet built by workshop contributors and their agents. Click a house to visit its maker." />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🪐</text></svg>" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@300;500;700&family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --ink: #e8e4d8;
+    --ink-dim: #9a96a8;
+    --gold: #e8b44a;
+    --gold-soft: rgba(232, 180, 74, 0.35);
+    --void: #06070f;
+    --panel: rgba(10, 12, 24, 0.72);
+    --hairline: rgba(232, 228, 216, 0.16);
+    --display: 'Unbounded', sans-serif;
+    --mono: 'IBM Plex Mono', monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; background: var(--void); }
+  body { font-family: var(--mono); color: var(--ink); }
+  #scene { position: fixed; inset: 0; display: block; }
+  canvas { display: block; }
+
+  /* ---------- grain overlay ---------- */
+  body::after {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 40;
+    opacity: 0.05; mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .hud { position: fixed; z-index: 20; pointer-events: none; }
+  .hud > * { pointer-events: auto; }
+
+  /* ---------- title ---------- */
+  #title { top: 28px; left: 32px; }
+  #title h1 {
+    font-family: var(--display); font-weight: 700; font-size: clamp(15px, 1.6vw, 22px);
+    letter-spacing: 0.22em; color: var(--ink);
+    text-shadow: 0 0 24px rgba(232, 180, 74, 0.25);
+  }
+  #title h1 em { font-style: normal; color: var(--gold); }
+  #title p {
+    margin-top: 8px; font-size: 11px; font-weight: 300; letter-spacing: 0.12em;
+    color: var(--ink-dim); max-width: 34ch; line-height: 1.7;
+  }
+  #title .rule { width: 72px; height: 1px; background: linear-gradient(90deg, var(--gold), transparent); margin-top: 12px; }
+
+  /* ---------- sky console (time of day) ---------- */
+  #skyconsole { top: 28px; right: 32px; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+  #clockface { font-size: 10px; letter-spacing: 0.3em; color: var(--ink-dim); text-transform: uppercase; }
+  #clockface b { color: var(--gold); font-weight: 500; }
+  .btnrow { display: flex; gap: 6px; }
+  .skybtn {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+    background: var(--panel); color: var(--ink-dim); border: 1px solid var(--hairline);
+    padding: 7px 11px; cursor: pointer; backdrop-filter: blur(8px);
+    transition: color .25s, border-color .25s, box-shadow .25s;
+  }
+  .skybtn:hover, .skybtn.active { color: var(--gold); border-color: var(--gold-soft); box-shadow: 0 0 18px rgba(232,180,74,.12); }
+
+  /* ---------- roster ---------- */
+  #roster { bottom: 32px; left: 32px; max-width: 300px; }
+  #roster h2 {
+    font-family: var(--display); font-weight: 300; font-size: 10px; letter-spacing: 0.34em;
+    text-transform: uppercase; color: var(--ink-dim); margin-bottom: 10px;
+  }
+  #roster ul { list-style: none; border-left: 1px solid var(--hairline); }
+  #roster li button {
+    display: block; width: 100%; text-align: left; font-family: var(--mono); font-size: 12px;
+    background: none; border: none; color: var(--ink); padding: 6px 0 6px 14px; cursor: pointer;
+    letter-spacing: 0.06em; transition: color .2s, padding-left .2s; position: relative;
+  }
+  #roster li button::before {
+    content: '◆'; position: absolute; left: -4.5px; top: 50%; transform: translateY(-50%) scale(0.5);
+    color: var(--gold); opacity: 0; transition: opacity .2s;
+    background: var(--void); line-height: 1;
+  }
+  #roster li button:hover { color: var(--gold); padding-left: 20px; }
+  #roster li button:hover::before { opacity: 1; }
+  #roster li button small { display: block; color: var(--ink-dim); font-size: 10px; font-weight: 300; letter-spacing: 0.04em; }
+
+  /* ---------- hint ---------- */
+  #hint { bottom: 32px; right: 32px; font-size: 10px; letter-spacing: 0.2em; color: var(--ink-dim); text-transform: uppercase; text-align: right; line-height: 2; }
+  #hint b { color: var(--ink); font-weight: 400; }
+
+  /* ---------- hover tooltip ---------- */
+  #tooltip {
+    position: fixed; z-index: 25; pointer-events: none; opacity: 0; transition: opacity .15s;
+    background: var(--panel); border: 1px solid var(--gold-soft); padding: 6px 12px;
+    font-size: 11px; letter-spacing: 0.12em; color: var(--gold); backdrop-filter: blur(8px);
+    transform: translate(14px, -50%); white-space: nowrap;
+  }
+
+  /* ---------- visit card ---------- */
+  #card {
+    position: fixed; z-index: 30; left: 50%; bottom: 48px; transform: translate(-50%, 30px);
+    opacity: 0; pointer-events: none; transition: opacity .5s ease, transform .5s cubic-bezier(.2,.9,.3,1);
+    background: var(--panel); border: 1px solid var(--hairline); border-top: 1px solid var(--gold-soft);
+    padding: 26px 34px; text-align: center; backdrop-filter: blur(14px); min-width: 320px;
+  }
+  #card.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+  #card .kicker { font-size: 9px; letter-spacing: 0.4em; text-transform: uppercase; color: var(--ink-dim); }
+  #card h3 { font-family: var(--display); font-weight: 500; font-size: 20px; letter-spacing: 0.08em; margin: 10px 0 6px; color: var(--ink); }
+  #card p { font-size: 11px; font-weight: 300; color: var(--ink-dim); letter-spacing: 0.06em; margin-bottom: 18px; font-style: italic; }
+  #card .actions { display: flex; gap: 10px; justify-content: center; }
+  #enterBtn {
+    font-family: var(--display); font-weight: 500; font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase;
+    background: var(--gold); color: #14100a; border: none; padding: 12px 22px; cursor: pointer;
+    transition: box-shadow .25s, transform .15s;
+  }
+  #enterBtn:hover { box-shadow: 0 0 28px rgba(232,180,74,.45); transform: translateY(-1px); }
+  #leaveBtn {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase;
+    background: none; color: var(--ink-dim); border: 1px solid var(--hairline); padding: 12px 18px; cursor: pointer;
+    transition: color .25s, border-color .25s;
+  }
+  #leaveBtn:hover { color: var(--ink); border-color: var(--ink-dim); }
+
+  /* ---------- site viewer ---------- */
+  #flash { position: fixed; inset: 0; z-index: 50; background: #fff7e6; opacity: 0; pointer-events: none; transition: opacity .6s ease; }
+  #flash.on { opacity: 1; }
+  #viewer { position: fixed; inset: 0; z-index: 45; display: none; background: var(--void); }
+  #viewer.open { display: block; }
+  #viewer iframe { width: 100%; height: 100%; border: 0; }
+  #backBtn {
+    position: fixed; top: 20px; left: 20px; z-index: 46;
+    font-family: var(--display); font-size: 10px; font-weight: 500; letter-spacing: 0.2em; text-transform: uppercase;
+    background: rgba(6,7,15,.8); color: var(--gold); border: 1px solid var(--gold-soft);
+    padding: 11px 18px; cursor: pointer; backdrop-filter: blur(10px); display: none;
+    transition: box-shadow .25s;
+  }
+  #backBtn:hover { box-shadow: 0 0 22px rgba(232,180,74,.3); }
+  #backBtn.show { display: block; }
+
+  /* ---------- loading ---------- */
+  #loading {
+    position: fixed; inset: 0; z-index: 60; background: var(--void);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 26px;
+    transition: opacity 1s ease;
+  }
+  #loading.gone { opacity: 0; pointer-events: none; }
+  #loading .orb {
+    width: 54px; height: 54px; border-radius: 50%;
+    background: radial-gradient(circle at 34% 30%, #6fb65f 0%, #3c7a52 42%, #1c3550 75%, #101c33 100%);
+    box-shadow: 0 0 40px rgba(111, 182, 95, 0.35), 0 0 90px rgba(232, 180, 74, 0.12);
+    animation: drift 3.2s ease-in-out infinite;
+  }
+  @keyframes drift { 0%, 100% { transform: translateY(0) } 50% { transform: translateY(-12px) } }
+  #loading .word { font-family: var(--display); font-weight: 300; font-size: 11px; letter-spacing: 0.5em; text-transform: uppercase; color: var(--ink-dim); }
+  #loading .word b { color: var(--gold); font-weight: 500; }
+  #loadmsg { font-size: 10px; letter-spacing: 0.2em; color: var(--ink-dim); }
+  #loadmsg.error { color: #e07a5f; max-width: 46ch; text-align: center; line-height: 2; }
+
+  @media (max-width: 720px) {
+    #title p, #hint, #roster h2 { display: none; }
+    #roster { bottom: 20px; left: 20px; }
+    #skyconsole { top: auto; bottom: 20px; right: 20px; }
+    #title { top: 20px; left: 20px; }
+  }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.166.1/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <div class="hud" id="title">
+    <h1>SCALABLE <em>CORE</em> WORLD</h1>
+    <p>a tiny planet, one plot per contributor.<br/>click a house to meet its maker.</p>
+    <div class="rule"></div>
+  </div>
+
+  <div class="hud" id="skyconsole">
+    <div id="clockface">SOL <b id="clocktime">—</b></div>
+    <div class="btnrow">
+      <button class="skybtn" data-phase="dawn">Dawn</button>
+      <button class="skybtn" data-phase="noon">Noon</button>
+      <button class="skybtn" data-phase="dusk">Dusk</button>
+      <button class="skybtn" data-phase="night">Night</button>
+      <button class="skybtn" data-phase="aurora">✦ Aurora</button>
+    </div>
+    <div class="btnrow">
+      <button class="skybtn" id="speedBtn">time ×1</button>
+    </div>
+  </div>
+
+  <div class="hud" id="roster">
+    <h2>Settlers</h2>
+    <ul id="rosterList"></ul>
+  </div>
+
+  <div class="hud" id="hint">
+    <b>drag</b> orbit · <b>scroll</b> zoom<br/><b>click a house</b> to visit
+  </div>
+
+  <div id="tooltip"></div>
+
+  <div id="card">
+    <div class="kicker">You have arrived at the home of</div>
+    <h3 id="cardName">—</h3>
+    <p id="cardTagline">—</p>
+    <div class="actions">
+      <button id="enterBtn">Enter the house</button>
+      <button id="leaveBtn">Keep exploring</button>
+    </div>
+  </div>
+
+  <div id="viewer"><iframe id="siteFrame" title="contributor site" src="about:blank"></iframe></div>
+  <button id="backBtn">← Back to the planet</button>
+  <div id="flash"></div>
+
+  <div id="loading">
+    <div class="orb"></div>
+    <div class="word">SCALABLE <b>CORE</b> WORLD</div>
+    <div id="loadmsg">carving the planet…</div>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

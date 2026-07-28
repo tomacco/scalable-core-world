@@ -1,0 +1,30 @@
+{
+  "name": "Ivan Gonzalez",
+  "tagline": "founder of the core world",
+  "site": "site/index.html",
+  "avatar": {
+    "skin": "#e0ac69",
+    "eyes": "#26262e",
+    "hair": { "style": "short", "color": "#2c1b10" },
+    "beard": true,
+    "glasses": true,
+    "glassesColor": "#1b1b22",
+    "outfit": { "type": "pants", "top": "#c94f30", "bottom": "#2b3a67", "shoes": "#26211c" }
+  },
+  "house": {
+    "size": "medium",
+    "wall": "#e8d8b0",
+    "roof": "#b5442e",
+    "door": "#5b3a1e",
+    "trim": "#f4efe4",
+    "windowsLit": true
+  },
+  "garden": {
+    "trees": 2,
+    "flowers": ["#ff5f8f", "#ffd23f", "#7ec8e3"],
+    "fence": true,
+    "lamp": true,
+    "path": true,
+    "extras": ["bench", "mailbox", "telescope"]
+  }
+}
