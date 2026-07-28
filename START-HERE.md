@@ -26,15 +26,15 @@ If you're not already inside the repo, clone it and work from there:
   git clone https://github.com/tomacco/scalable-core-world
   cd scalable-core-world
 Then read AGENTS.md — it's the rulebook — and START-HERE.md. Follow the rules
-exactly: I only get my own folder at contributors/<my-handle>/ plus ONE
-appended line in contributors/manifest.json. Never touch the engine, the docs,
+exactly: I only get my own folder at contributors/<my-handle>/ plus one
+appended entry in contributors/manifest.json. Never touch the engine, the docs,
 or anyone else's folder, and stage files by explicit path (never `git add -A`).
 
 Then interview me before building anything. Ask in small batches, and offer a
 sensible default for every option so I can just say "default":
 
-1. ME: my handle (use my GitHub username — no legal names), a short tagline for
-   the sign over my house, and what I want my website to be about.
+1. ME: my handle (my GitHub username — no legal names), a short tagline for
+   the sign over my house, and what my website should be about.
 2. MY AVATAR: size (small villager / medium / large / house-tall GIANT), hair
    style (short, long, bun, mohawk, curly, bald) + color, skin tone, beard?,
    glasses?, outfit (pants or dress + top / bottom / shoe colors), and a hat?
@@ -44,7 +44,9 @@ sensible default for every option so I can just say "default":
 4. MY GARDEN: platform (cozy or grand), how many trees (0–6), flower colors,
    fence?, a lamp?, a path?, and extras (bench, mailbox, pond, pumpkin,
    telescope, flag).
-5. MY WEBSITE: the topic, a one-line intro, and 2–4 sections I want on the page.
+5. MY WEBSITE: the topic, a one-line intro, and 2–4 sections I want. For a
+   contact section, use a public profile link only (e.g. my GitHub) — never an
+   email or phone number; PII is blocked.
 
 After the interview:
 - Create contributors/<handle>/config.json using the schema in AGENTS.md §3
@@ -52,12 +54,14 @@ After the interview:
 - Scaffold contributors/<handle>/site/index.html — a real, self-contained
   static page about my topic with the sections I chose. Pick a distinctive
   font, design it with intent (look at contributors/tomacco/site for structure,
-  but make it visually mine), use relative asset paths only, and no trackers or
-  external network calls. No lorem-ipsum placeholder.
-- Append "<handle>" as the LAST item in contributors/manifest.json (change
-  nothing else in that file).
-- Run:  node scripts/validate-contribution.mjs origin/main  — and fix anything
-  it flags.
+  but make it visually mine), relative asset paths only, no trackers or
+  external network calls, and don't hardcode a plot number (plots are numbered
+  by manifest order and can shift). No placeholder text.
+- Append "<handle>" as the LAST entry in contributors/manifest.json (change
+  nothing else there — this is my plot assignment).
+- Validate: run  node scripts/validate-contribution.mjs origin/main  and fix
+  anything it flags. (No Node installed? Skip this — CI runs the same checks on
+  my PR.)
 - If you can, start a local server (npx serve, or python -m http.server 8080)
   and open http://localhost:8080/#visit=<handle> so I can see my house, avatar,
   and site.

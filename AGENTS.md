@@ -211,6 +211,10 @@ silently skipped and their plot stays empty.
   survive without them.
 - Make it *good*. This is the contributor's face to the world: a real topic
   they love, designed with intent — not a default-font "hello world".
+- **Don't hardcode a plot number.** Plots are numbered by manifest order and
+  shift as the world grows — the founder's `Plot Nº 001` is theirs, not a
+  template to copy. Leave it out, or the engine will show your name over the
+  right house regardless.
 
 ---
 
