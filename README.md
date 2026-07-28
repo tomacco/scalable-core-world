@@ -30,10 +30,13 @@ raises the homestead in a single pull request.
 
 ## Claim a plot
 
-Open the repo with your coding agent and say *"I want to settle here."*
-The agent will read [`AGENTS.md`](AGENTS.md) — the world's rulebook — interview
-you about your avatar, your house, and your website topic, and open a PR that
-touches only your own folder:
+New contributor? **[START-HERE.md](START-HERE.md)** has a copy-paste prompt for
+your coding agent and walks you through it.
+
+In short: open the repo with your coding agent and say *"I want to settle
+here."* The agent will read [`AGENTS.md`](AGENTS.md) — the world's rulebook —
+interview you about your avatar, your house, and your website topic, and open a
+PR that touches only your own folder:
 
 ```
 contributors/
