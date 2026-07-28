@@ -16,10 +16,17 @@ raises the homestead in a single pull request.
 
 **https://tomacco.github.io/scalable-core-world/**
 
-- **Drag** to orbit, **scroll** to zoom.
+- **Drag** to spin the globe, **scroll** to zoom — all the way down to terrain
+  level. The planet core is always the pivot; there is no panning.
+- **Click a house** (or a name in the *Settlers* roster) and the camera flies
+  over: now the *house* is your orbit pivot. Return with **🌍 Planet view** or `Esc`.
 - Use the sky console (top right) to summon **dawn, noon, dusk, night — or the
   aurora borealis** over the pole.
-- Click a house (or a name in the *Settlers* roster) to visit someone.
+- The wilds are alive: forests, bushes, wildflowers, mushrooms, rocks — plus
+  sheep, rabbits, foxes, chickens, butterflies over the flowers, and birds
+  riding great circles around the planet.
+- Deep links: `#phase=dusk` (or `dawn`/`noon`/`night`/`aurora`) and
+  `#visit=ivan-gonzalez` jump straight to a sky event or a settler's house.
 
 ## Claim a plot
 

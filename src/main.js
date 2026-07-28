@@ -19,6 +19,7 @@ const tooltip = $('tooltip');
 const card = $('card'), cardName = $('cardName'), cardTagline = $('cardTagline');
 const enterBtn = $('enterBtn'), leaveBtn = $('leaveBtn');
 const viewer = $('viewer'), siteFrame = $('siteFrame'), backBtn = $('backBtn'), flash = $('flash');
+const homeBtn = $('homeBtn');
 const rosterList = $('rosterList');
 const clockTime = $('clocktime'), speedBtn = $('speedBtn');
 
@@ -35,15 +36,37 @@ renderer.toneMappingExposure = 1.15;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.5, 2000);
-camera.position.set(18, 30, 72);
+camera.position.set(30, 45, 110);
 
+// Two camera modes, both pan-free so the pivot is always meaningful:
+//   globe — pivot is the planet core: spin from afar, skim terrain up close
+//   house — pivot is a settler's house after clicking it; the "🌍 Planet
+//           view" button (or Esc) flies you back out to globe mode
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.06;
-controls.minDistance = 38;
-controls.maxDistance = 300;
+controls.enablePan = false;
+controls.target.set(0, 0, 0);
 controls.autoRotate = true;
 controls.autoRotateSpeed = 0.4;
+
+const GLOBE_MIN = 52, GLOBE_MAX = 340;
+const SAFE_RADIUS = 46; // hard floor: the camera never sinks into the terrain
+
+let mode = 'globe';
+function setMode(m) {
+  mode = m;
+  if (m === 'globe') {
+    controls.minDistance = GLOBE_MIN;
+    controls.maxDistance = GLOBE_MAX;
+    homeBtn.classList.remove('show');
+  } else {
+    controls.minDistance = 9;   // distances are measured from the house now
+    controls.maxDistance = 130;
+    homeBtn.classList.add('show');
+  }
+}
+setMode('globe');
 
 let idleTimer = null;
 controls.addEventListener('start', () => {
@@ -61,12 +84,12 @@ controls.addEventListener('end', () => {
 const sunLight = new THREE.DirectionalLight(0xffffff, 2.4);
 sunLight.castShadow = true;
 sunLight.shadow.mapSize.set(2048, 2048);
-sunLight.shadow.camera.left = -55;
-sunLight.shadow.camera.right = 55;
-sunLight.shadow.camera.top = 55;
-sunLight.shadow.camera.bottom = -55;
-sunLight.shadow.camera.near = 20;
-sunLight.shadow.camera.far = 220;
+sunLight.shadow.camera.left = -75;
+sunLight.shadow.camera.right = 75;
+sunLight.shadow.camera.top = 75;
+sunLight.shadow.camera.bottom = -75;
+sunLight.shadow.camera.near = 40;
+sunLight.shadow.camera.far = 320;
 sunLight.shadow.bias = -0.0006;
 scene.add(sunLight);
 scene.add(sunLight.target);
@@ -93,9 +116,9 @@ const PHASE_ANGLES = { dawn: 0.02, noon: Math.PI / 2, dusk: Math.PI - 0.06, nigh
 
 // camera vantages that frame each sky event (sun rim for god rays, pole for aurora)
 const VANTAGES = {
-  dawn: { pos: [-95, 18, 55], target: [0, 0, 0] },
-  dusk: { pos: [95, 18, 55], target: [0, 0, 0] },
-  aurora: { pos: [40, 60, 150], target: [0, 45, 0] },
+  dawn: [-125, 25, 75],
+  dusk: [125, 25, 75],
+  aurora: [40, 20, 190],
 };
 
 // deep link: index.html#phase=dusk (dawn|noon|dusk|night|aurora)
@@ -103,11 +126,7 @@ const VANTAGES = {
   const wanted = new URLSearchParams(location.hash.slice(1)).get('phase');
   if (wanted === 'aurora') { sunAngle = PHASE_ANGLES.night; auroraBoost = 0.65; }
   else if (wanted in PHASE_ANGLES) sunAngle = PHASE_ANGLES[wanted];
-  const v = VANTAGES[wanted];
-  if (v) {
-    camera.position.set(...v.pos);
-    controls.target.set(...v.target);
-  }
+  if (VANTAGES[wanted]) camera.position.set(...VANTAGES[wanted]);
 }
 
 document.querySelectorAll('.skybtn[data-phase]').forEach((btn) => {
@@ -119,7 +138,9 @@ document.querySelectorAll('.skybtn[data-phase]').forEach((btn) => {
     const v = VANTAGES[phase];
     if (v && !viewer.classList.contains('open')) {
       hideCard();
-      flyCamera(new THREE.Vector3(...v.pos), new THREE.Vector3(...v.target), 2000);
+      focusedId = null;
+      setMode('globe');
+      flyCamera(new THREE.Vector3(...v), new THREE.Vector3(0, 0, 0), 2000);
     }
   });
 });
@@ -154,16 +175,27 @@ async function boot() {
   loadMsg.textContent = 'growing the wilds…';
   await new Promise((r) => setTimeout(r, 20));
 
-  for (const spot of wildSpots()) {
+  const spots = wildSpots();
+  for (const spot of spots) {
     const decor = buildWildDecor(spot);
     orientOnPlanet(decor.group, spot.dir, spot.radius + 0.4, rnd.hash(spot.seed, 5, 5) * Math.PI * 2, 0.85);
     scene.add(decor.group);
   }
 
+  // butterflies gather where the wildflowers grow, spread around the globe
+  const flowers = spots.filter((s) => s.kind === 'flower');
+  const stride = Math.max(1, Math.ceil(flowers.length / 12));
+  for (let i = 0; i < flowers.length; i += stride) spawnButterfly(flowers[i]);
+  spawnBirds(6);
+
   loadMsg.textContent = 'welcoming the settlers…';
   await loadContributors();
 
   loadingEl.classList.add('gone');
+
+  // deep link: index.html#visit=ivan-gonzalez flies straight to a house
+  const visit = new URLSearchParams(location.hash.slice(1)).get('visit');
+  if (visit && contributorsById.has(visit)) flyTo(visit);
 }
 
 async function loadContributors() {
@@ -223,6 +255,103 @@ async function loadContributors() {
   if (contributorsById.size === 0) {
     loadMsg.classList.add('error');
     loadMsg.textContent = 'no contributors could be loaded';
+  }
+}
+
+// ------------------------------------------------------------ fauna
+
+const butterflies = [];
+const birds = [];
+
+function tangentFrame(dir) {
+  let e1 = new THREE.Vector3(0, 1, 0).cross(dir);
+  if (e1.lengthSq() < 0.01) e1 = new THREE.Vector3(1, 0, 0).cross(dir);
+  e1.normalize();
+  const e2 = dir.clone().cross(e1).normalize();
+  return { e1, e2 };
+}
+
+function makeWingPair(w, h, color) {
+  const mat = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide });
+  const geoL = new THREE.PlaneGeometry(w, h);
+  geoL.rotateX(-Math.PI / 2);
+  geoL.translate(w / 2, 0, 0);
+  const geoR = geoL.clone();
+  geoR.translate(-w, 0, 0);
+  return { left: new THREE.Mesh(geoL, mat), right: new THREE.Mesh(geoR, mat) };
+}
+
+function spawnButterfly(spot) {
+  const s = spot.seed;
+  const color = new THREE.Color().setHSL(rnd.hash(s, 21, 1), 0.8, 0.62);
+  const group = new THREE.Group();
+  const wings = makeWingPair(0.55, 0.42, color);
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(0.09, 0.09, 0.45),
+    new THREE.MeshBasicMaterial({ color: 0x26222b })
+  );
+  group.add(wings.left, wings.right, body);
+  scene.add(group);
+  butterflies.push({
+    group, wings,
+    dir: spot.dir.clone(), radius: spot.radius,
+    frame: tangentFrame(spot.dir),
+    phase: rnd.hash(s, 22, 2) * Math.PI * 2,
+    drift: 0.9 + rnd.hash(s, 23, 3) * 1.1,
+  });
+}
+
+function spawnBirds(count) {
+  for (let i = 0; i < count; i++) {
+    const axis = new THREE.Vector3(
+      rnd.hash(i, 31, 1) - 0.5, rnd.hash(i, 32, 2) - 0.5, rnd.hash(i, 33, 3) - 0.5
+    ).normalize();
+    const { e1 } = tangentFrame(axis);
+    const group = new THREE.Group();
+    const wings = makeWingPair(1.1, 0.38, 0x2a2b33);
+    const body = new THREE.Mesh(
+      new THREE.BoxGeometry(0.2, 0.2, 0.8),
+      new THREE.MeshBasicMaterial({ color: 0x2a2b33 })
+    );
+    group.add(wings.left, wings.right, body);
+    scene.add(group);
+    birds.push({
+      group, wings, axis, base: e1,
+      radius: 56 + rnd.hash(i, 34, 4) * 14,
+      speed: (0.05 + rnd.hash(i, 35, 5) * 0.05) * (rnd.hash(i, 36, 6) > 0.5 ? 1 : -1),
+      phase: rnd.hash(i, 37, 7) * Math.PI * 2,
+    });
+  }
+}
+
+const _q = new THREE.Quaternion();
+const _v1 = new THREE.Vector3();
+const _v2 = new THREE.Vector3();
+
+function updateFauna(t) {
+  for (const b of butterflies) {
+    const wander = t * 0.55 * b.drift + b.phase;
+    _v1.copy(b.frame.e1).multiplyScalar(Math.cos(wander) * 1.4)
+      .addScaledVector(b.frame.e2, Math.sin(wander) * 1.4);
+    const lift = 2.0 + Math.sin(t * 1.8 + b.phase * 3) * 0.6;
+    b.group.position.copy(b.dir).multiplyScalar(b.radius + lift).add(_v1);
+    b.group.quaternion.setFromUnitVectors(_v2.set(0, 1, 0), b.dir);
+    const flap = Math.sin(t * 14 + b.phase) * 0.85;
+    b.wings.left.rotation.z = flap;
+    b.wings.right.rotation.z = -flap;
+  }
+
+  for (const b of birds) {
+    const a = t * b.speed + b.phase;
+    _q.setFromAxisAngle(b.axis, a);
+    _v1.copy(b.base).applyQuaternion(_q).multiplyScalar(b.radius);
+    _q.setFromAxisAngle(b.axis, a + 0.03 * Math.sign(b.speed));
+    _v2.copy(b.base).applyQuaternion(_q).multiplyScalar(b.radius);
+    b.group.position.copy(_v1);
+    b.group.lookAt(_v2);
+    const flap = Math.sin(t * 7 + b.phase) * 0.55;
+    b.wings.left.rotation.z = flap;
+    b.wings.right.rotation.z = -flap;
   }
 }
 
@@ -302,6 +431,7 @@ function flyTo(id) {
   if (!rec) return;
   hideCard();
   focusedId = id;
+  setMode('house'); // widen distance limits before the flight starts
 
   const normal = rec.plot.dir.clone();
   const housePos = normal.clone().multiplyScalar(rec.plot.radius + 3.5);
@@ -310,11 +440,21 @@ function flyTo(id) {
   let side = camera.position.clone().normalize().projectOnPlane(normal);
   if (side.lengthSq() < 0.01) side = new THREE.Vector3(0, 1, 0).projectOnPlane(normal);
   side.normalize();
-  const endPos = normal.clone().multiplyScalar(rec.plot.radius + 12)
-    .add(side.multiplyScalar(17));
+  const endPos = normal.clone().multiplyScalar(rec.plot.radius + 17)
+    .add(side.multiplyScalar(25));
 
   flyCamera(endPos, housePos, 2400, () => showCard(rec));
 }
+
+function returnToGlobe() {
+  hideCard();
+  focusedId = null;
+  setMode('globe');
+  const out = camera.position.clone().normalize().multiplyScalar(130);
+  flyCamera(out, new THREE.Vector3(0, 0, 0), 1800);
+}
+
+homeBtn.addEventListener('click', returnToGlobe);
 
 function showCard(rec) {
   cardName.textContent = rec.config.name || rec.id;
@@ -350,6 +490,7 @@ function closeViewer() {
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     if (viewer.classList.contains('open')) closeViewer();
+    else if (mode === 'house' && !flying) returnToGlobe();
     else hideCard();
   }
 });
@@ -386,11 +527,11 @@ function animate() {
   const { nightF, duskF } = sky.update(sunDir, elapsed, auroraBoost);
   const dayF = 1 - nightF;
 
-  sunLight.position.copy(sunDir).multiplyScalar(110);
+  sunLight.position.copy(sunDir).multiplyScalar(150);
   sunLight.intensity = 0.1 + dayF * 2.6;
   sunLight.color.setRGB(1, 1 - duskF * 0.38, 1 - duskF * 0.62);
   hemi.intensity = 0.18 + dayF * 0.55;
-  moonFill.position.copy(sunDir).multiplyScalar(-110);
+  moonFill.position.copy(sunDir).multiplyScalar(-150);
   moonFill.intensity = nightF * 0.55;
 
   const glowLevel = 0.5 + nightF * 0.75;
@@ -398,13 +539,33 @@ function animate() {
 
   clockTime.textContent = formatSolTime(sunAngle);
 
+  updateFauna(elapsed);
+
+  // name labels fade out when you're close enough to read the front door
+  for (const rec of contributorsById.values()) {
+    rec.label.visible = camera.position.distanceTo(rec.label.position) > 30;
+  }
+
   if (tween) {
     const k = Math.min(1, (performance.now() - tween.start) / tween.duration);
     tween.update(k);
     if (k >= 1) { const t = tween; tween = null; t.done(); }
   }
 
+  // gentle up close, brisk when spinning the globe from afar
+  const closeness = mode === 'globe'
+    ? THREE.MathUtils.clamp((camera.position.length() - GLOBE_MIN) / 200, 0, 1)
+    : THREE.MathUtils.clamp(camera.position.distanceTo(controls.target) / 90, 0, 1);
+  controls.rotateSpeed = 0.15 + closeness * 0.85;
+  controls.zoomSpeed = 0.55 + closeness * 0.65;
+
   controls.update();
+
+  // hard floor: never let the camera dive inside the planet (matters most
+  // while orbiting a house, where the pivot sits near the surface)
+  if (!tween && camera.position.length() < SAFE_RADIUS) {
+    camera.position.setLength(SAFE_RADIUS);
+  }
   pick();
   postfx.update(sunDir.clone().multiplyScalar(640), duskF, nightF);
   postfx.composer.render();

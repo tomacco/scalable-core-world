@@ -4,11 +4,11 @@
 import * as THREE from 'three';
 import { makeNoise } from './noise.js';
 
-export const PLANET_RADIUS = 26;
-export const SEA_LEVEL = 26.0;
+export const PLANET_RADIUS = 38;
+export const SEA_LEVEL = 38.0;
 export const PLOT_COUNT = 20;
 
-const AMP = 4.2;              // terrain amplitude in voxels
+const AMP = 5.2;              // terrain amplitude in voxels
 const PLOT_INNER = 0.24;      // radians: fully flat plot cap
 const PLOT_OUTER = 0.38;      // radians: blend back into wild terrain
 
@@ -103,7 +103,12 @@ export function buildPlanet() {
     for (let y = -E; y <= E; y++) {
       for (let z = -E; z <= E; z++) {
         const r = Math.sqrt(x * x + y * y + z * z);
-        if (r < 0.001 || r > PLANET_RADIUS + AMP + 2) continue;
+        if (r > PLANET_RADIUS + AMP + 2) continue;
+        if (r < PLANET_RADIUS - 8) {
+          // deep interior is always solid — skip the (expensive) noise
+          grid[idx(x, y, z)] = MAT_STONE;
+          continue;
+        }
         dir.set(x / r, y / r, z / r);
         const tR = terrainRadius(dir);
         if (r <= tR) {
@@ -232,27 +237,51 @@ export function buildPlanet() {
   return group;
 }
 
-// Deterministic spots for wild decor (trees, rocks) away from plots and sea.
-export function wildSpots(count = 90) {
+// Deterministic spots for wild life away from plots and sea:
+// vegetation (trees, bushes, flowers, grass, mushrooms), rocks, and animals.
+const WILD_KINDS = [
+  ['tree', 0.30], ['bush', 0.12], ['flower', 0.16], ['grass', 0.14],
+  ['rock', 0.09], ['mushroom', 0.05],
+  ['sheep', 0.04], ['rabbit', 0.04], ['fox', 0.03], ['chicken', 0.03],
+];
+
+function pickKind(t) {
+  let acc = 0;
+  for (const [kind, w] of WILD_KINDS) {
+    acc += w;
+    if (t <= acc) return kind;
+  }
+  return 'tree';
+}
+
+// Candidates run pole-to-pole; density is controlled by the hash thinning
+// below (never by an early stop, which would cluster life at one pole).
+export function wildSpots() {
   const spots = [];
   const golden = Math.PI * (3 - Math.sqrt(5));
-  const n = 420;
+  const n = 1400;
   const v = new THREE.Vector3();
-  for (let i = 0; i < n && spots.length < count; i++) {
+  for (let i = 0; i < n; i++) {
     const y = 1 - (2 * (i + 0.5)) / n;
     const rr = Math.sqrt(1 - y * y);
     const a = golden * i + noise.hash(i, 3, 7) * 0.5;
     v.set(Math.cos(a) * rr, y, Math.sin(a) * rr).normalize();
     if (Math.abs(v.y) > 0.86) continue;
     const tR = terrainRadius(v);
-    if (tR < SEA_LEVEL + 1.3) continue;
+    if (tR < SEA_LEVEL + 0.95) continue; // anywhere the grass grows
+    // keep clear of estate footprints only — the blend ring may stay wild
     let nearPlot = false;
     for (const p of plots) {
-      if (v.dot(p.dir) > Math.cos(PLOT_OUTER + 0.1)) { nearPlot = true; break; }
+      if (v.dot(p.dir) > Math.cos(PLOT_INNER + 0.03)) { nearPlot = true; break; }
     }
     if (nearPlot) continue;
-    if (noise.hash(i, 11, 5) < 0.45) continue;
-    spots.push({ dir: v.clone(), radius: tR, kind: noise.hash(i, 2, 9) > 0.72 ? 'rock' : 'tree', seed: i });
+    if (noise.hash(i, 11, 5) < 0.42) continue;
+    spots.push({
+      dir: v.clone(),
+      radius: tR,
+      kind: pickKind(noise.hash(i, 2, 9)),
+      seed: i,
+    });
   }
   return spots;
 }

@@ -417,14 +417,115 @@ function plantTree(b, tx, tz, seed) {
 
 // --------------------------------------------------------- wild decor
 
+const WILD_FLOWER_COLORS = ['#ff5f8f', '#ffd23f', '#7ec8e3', '#e06bd7', '#ff8c42', '#f4f1de'];
+
 export function buildWildDecor(spot) {
+  const s = spot.seed;
   const b = new VoxelBuilder(1);
-  if (spot.kind === 'tree') {
-    plantTree(b, 0, 0, spot.seed);
-  } else {
-    b.cuboid(0, 0.4, 0, 1.6, 1.1, 1.4, '#7d7e87');
-    b.cuboid(0.8, 0.2, 0.5, 0.9, 0.7, 0.9, '#6a6b74');
+
+  switch (spot.kind) {
+    case 'tree':
+      plantTree(b, 0, 0, s);
+      break;
+
+    case 'bush': {
+      const leaf = rng.hash(s, 1, 1) > 0.5 ? '#3e8a3e' : '#5fae4f';
+      b.cuboid(0, 0.5, 0, 1.8, 1.1, 1.8, leaf);
+      b.cuboid(0.6, 1.1, 0.4, 1.0, 0.7, 1.0, '#4c9b45');
+      b.cuboid(-0.6, 1.0, -0.3, 0.9, 0.6, 0.9, leaf);
+      if (rng.hash(s, 2, 2) > 0.6) b.cuboid(0.4, 1.0, -0.5, 0.25, 0.25, 0.25, '#d64545'); // berries
+      break;
+    }
+
+    case 'flower': {
+      const clusters = 1 + Math.floor(rng.hash(s, 3, 1) * 3);
+      for (let i = 0; i < clusters; i++) {
+        const fx = (rng.hash(s, i, 4) - 0.5) * 2.4;
+        const fz = (rng.hash(s, i, 5) - 0.5) * 2.4;
+        const col = WILD_FLOWER_COLORS[Math.floor(rng.hash(s, i, 6) * WILD_FLOWER_COLORS.length)];
+        b.cuboid(fx, 0.3, fz, 0.14, 0.6, 0.14, '#3f7a37');
+        b.cuboid(fx, 0.75, fz, 0.45, 0.35, 0.45, col);
+      }
+      break;
+    }
+
+    case 'grass': {
+      const tufts = 2 + Math.floor(rng.hash(s, 4, 1) * 3);
+      for (let i = 0; i < tufts; i++) {
+        const gx = (rng.hash(s, i, 7) - 0.5) * 2.2;
+        const gz = (rng.hash(s, i, 8) - 0.5) * 2.2;
+        const h = 0.7 + rng.hash(s, i, 9) * 0.7;
+        b.cuboid(gx, h / 2, gz, 0.16, h, 0.16, rng.hash(s, i, 10) > 0.5 ? '#6cae4f' : '#7dbf5a');
+      }
+      break;
+    }
+
+    case 'mushroom': {
+      b.cuboid(0, 0.35, 0, 0.3, 0.7, 0.3, '#e8ddc8');
+      b.cuboid(0, 0.8, 0, 0.9, 0.4, 0.9, '#c23b3b');
+      b.cuboid(-0.2, 1.02, 0.15, 0.18, 0.1, 0.18, '#f4efe4');
+      if (rng.hash(s, 5, 1) > 0.5) {
+        b.cuboid(0.7, 0.25, 0.4, 0.2, 0.5, 0.2, '#e8ddc8');
+        b.cuboid(0.7, 0.55, 0.4, 0.55, 0.28, 0.55, '#c23b3b');
+      }
+      break;
+    }
+
+    case 'rock':
+      b.cuboid(0, 0.4, 0, 1.6, 1.1, 1.4, '#7d7e87');
+      b.cuboid(0.8, 0.2, 0.5, 0.9, 0.7, 0.9, '#6a6b74');
+      break;
+
+    // ----------------------------------------------- small animals
+    case 'sheep': {
+      const wool = '#efeae0';
+      b.cuboid(0, 0.9, 0, 1.7, 1.0, 1.1, wool);       // fluffy body
+      b.cuboid(0, 1.45, 0.1, 1.2, 0.35, 0.8, wool);   // wool top
+      b.cuboid(1.05, 1.15, 0, 0.6, 0.55, 0.55, '#3a3630'); // head
+      b.cuboid(1.25, 1.4, 0, 0.5, 0.2, 0.7, wool);    // wool cap
+      for (const [lx, lz] of [[-0.55, -0.35], [-0.55, 0.35], [0.55, -0.35], [0.55, 0.35]])
+        b.cuboid(lx, 0.25, lz, 0.22, 0.5, 0.22, '#3a3630');
+      break;
+    }
+
+    case 'rabbit': {
+      const fur = rng.hash(s, 6, 1) > 0.5 ? '#d9cbb6' : '#b9a58c';
+      b.cuboid(0, 0.4, 0, 0.9, 0.6, 0.6, fur);        // body
+      b.cuboid(0.45, 0.75, 0, 0.45, 0.45, 0.45, fur); // head
+      b.cuboid(0.38, 1.25, -0.12, 0.14, 0.6, 0.14, fur); // ears
+      b.cuboid(0.38, 1.25, 0.12, 0.14, 0.6, 0.14, fur);
+      b.cuboid(-0.5, 0.5, 0, 0.2, 0.2, 0.2, '#f4efe4'); // tail
+      break;
+    }
+
+    case 'fox': {
+      const coat = '#d1662a';
+      b.cuboid(0, 0.5, 0, 1.5, 0.6, 0.6, coat);       // body
+      b.cuboid(0.85, 0.75, 0, 0.5, 0.45, 0.45, coat); // head
+      b.cuboid(1.15, 0.65, 0, 0.3, 0.22, 0.22, '#f4efe4'); // snout
+      b.cuboid(0.78, 1.1, -0.14, 0.14, 0.3, 0.1, coat);    // ears
+      b.cuboid(0.78, 1.1, 0.14, 0.14, 0.3, 0.1, coat);
+      b.cuboid(-0.95, 0.55, 0, 0.7, 0.3, 0.3, coat);  // tail
+      b.cuboid(-1.25, 0.55, 0, 0.2, 0.26, 0.26, '#f4efe4'); // tail tip
+      for (const [lx, lz] of [[-0.4, -0.2], [-0.4, 0.2], [0.5, -0.2], [0.5, 0.2]])
+        b.cuboid(lx, 0.15, lz, 0.16, 0.3, 0.16, '#8a4418');
+      break;
+    }
+
+    case 'chicken': {
+      b.cuboid(0, 0.55, 0, 0.8, 0.6, 0.6, '#f4efe4'); // body
+      b.cuboid(0.4, 0.95, 0, 0.4, 0.4, 0.4, '#f4efe4'); // head
+      b.cuboid(0.62, 0.9, 0, 0.18, 0.12, 0.12, '#e8a33d'); // beak
+      b.cuboid(0.4, 1.2, 0, 0.12, 0.16, 0.2, '#d64545');   // comb
+      b.cuboid(-0.1, 0.15, -0.12, 0.1, 0.3, 0.1, '#e8a33d'); // legs
+      b.cuboid(-0.1, 0.15, 0.12, 0.1, 0.3, 0.1, '#e8a33d');
+      break;
+    }
+
+    default:
+      plantTree(b, 0, 0, s);
   }
+
   return b.build();
 }
 
