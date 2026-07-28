@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { buildPlanet, plots, wildSpots, PLOT_COUNT } from './planet.js';
-import { buildEstate, buildWildDecor, makeLabel, GLOW_MATERIALS } from './structures.js';
+import { buildEstate, buildWildDecor, makeLabel, makeBadge, GLOW_MATERIALS } from './structures.js';
 import { createSky } from './sky.js';
 import { createPostFX } from './postfx.js';
 import { makeNoise } from './noise.js';
@@ -22,6 +22,7 @@ const viewer = $('viewer'), siteFrame = $('siteFrame'), backBtn = $('backBtn'), 
 const homeBtn = $('homeBtn');
 const rosterList = $('rosterList');
 const clockTime = $('clocktime'), speedBtn = $('speedBtn');
+const toastLayer = $('toastLayer');
 
 // -------------------------------------------------------- renderer
 
@@ -198,12 +199,52 @@ async function boot() {
   if (visit && contributorsById.has(visit)) flyTo(visit);
 }
 
+// Houses stay flagged NEW for this long after their merge/deploy.
+const NEW_WINDOW_MS = 5 * 60 * 1000;
+const spawnAnims = [];   // {group, targetScale, start, duration}
+const newBadges = [];    // {sprite, base, expires}
+
+// Always read the manifest past the CDN/browser cache — GitHub Pages caches it
+// for ~10 min at a stable URL, which would otherwise hide freshly-merged houses.
+async function fetchJSON(url, { bust = false } = {}) {
+  const res = await fetch(bust ? `${url}?t=${Date.now()}` : url, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`${url} → HTTP ${res.status}`);
+  return res.json();
+}
+
+// Freshness store. GitHub Pages stamps every file with the deploy time, so a
+// server header can't tell which house is genuinely new. Instead we remember
+// per-browser which settlers we've already shown: a live-poll arrival is new by
+// definition, and this store keeps a reload from either forgetting a recent
+// arrival or falsely flagging the whole world as NEW on a first visit.
+const SEEN_KEY = 'scw-seen-v1';
+const seenStore = loadSeen();
+const wasFirstVisit = Object.keys(seenStore).length === 0;
+
+function loadSeen() {
+  try { return JSON.parse(localStorage.getItem(SEEN_KEY)) || {}; }
+  catch { return {}; }
+}
+function markSeen(id, ts) {
+  seenStore[id] = ts;
+  try { localStorage.setItem(SEEN_KEY, JSON.stringify(seenStore)); } catch { /* private mode */ }
+}
+
+// Returns the timestamp to count NEW from, or null if this settler isn't fresh.
+function freshnessFor(id) {
+  const now = Date.now();
+  if (seenStore[id] != null) return (now - seenStore[id] < NEW_WINDOW_MS) ? seenStore[id] : null;
+  // first time THIS browser sees this id — on a very first visit, seed the
+  // whole existing world as already-settled so nobody is spuriously "new"
+  const ts = wasFirstVisit ? now - NEW_WINDOW_MS - 1000 : now;
+  markSeen(id, ts);
+  return (now - ts < NEW_WINDOW_MS) ? ts : null;
+}
+
 async function loadContributors() {
   let manifest;
   try {
-    const res = await fetch('contributors/manifest.json');
-    if (!res.ok) throw new Error(`manifest.json → HTTP ${res.status}`);
-    manifest = await res.json();
+    manifest = await fetchJSON('contributors/manifest.json', { bust: true });
   } catch (err) {
     console.error(err);
     loadMsg.classList.add('error');
@@ -212,56 +253,212 @@ async function loadContributors() {
   }
 
   const ids = manifest.contributors || [];
-  const results = await Promise.all(ids.map(async (id, i) => {
-    try {
-      const res = await fetch(`contributors/${id}/config.json`);
-      if (!res.ok) throw new Error(`config.json for ${id} → HTTP ${res.status}`);
-      return { id, index: i, config: await res.json() };
-    } catch (err) {
-      console.warn(`skipping contributor "${id}":`, err);
-      return null;
-    }
-  }));
-
-  for (const entry of results.filter(Boolean)) {
-    const { id, index, config } = entry;
-    const plot = plots[index % PLOT_COUNT];
-    const seed = 100 + index * 37;
-    const estate = buildEstate(config, seed);
-
-    const yaw = rnd.hash(index, 8, 3) * Math.PI * 2;
-    orientOnPlanet(estate.group, plot.dir, plot.radius + 1.3, yaw, 0.8);
-
-    const label = makeLabel(config.name || id);
-    label.position.copy(plot.dir).multiplyScalar(plot.radius + 1.3 + estate.roofY * 0.8 + 3.2);
-    scene.add(label);
-
-    const record = { id, config, plot, group: estate.group, label };
-    contributorsById.set(id, record);
-    for (const mesh of estate.meshes) {
-      mesh.userData.contributorId = id;
-      clickables.push(mesh);
-    }
-    scene.add(estate.group);
-
-    const li = document.createElement('li');
-    const btn = document.createElement('button');
-    // textContent, never innerHTML: contributor strings are untrusted and this
-    // node lives in the host page, not the sandboxed iframe
-    const nameEl = document.createElement('span');
-    nameEl.textContent = config.name || id;
-    const tagEl = document.createElement('small');
-    tagEl.textContent = config.tagline || '';
-    btn.append(nameEl, tagEl);
-    btn.addEventListener('click', () => flyTo(id));
-    li.appendChild(btn);
-    rosterList.appendChild(li);
-  }
+  await Promise.all(ids.map((id, i) => addSettler(id, i)));
 
   if (contributorsById.size === 0) {
     loadMsg.classList.add('error');
     loadMsg.textContent = 'no contributors could be loaded';
   }
+
+  startLiveSettlerPolling();
+}
+
+// Places one contributor on their plot. Plot = manifest index, and the manifest
+// is append-only, so incremental placement matches a full reload exactly — new
+// houses can be added live without disturbing anyone else's.
+async function addSettler(id, index, { announce = false } = {}) {
+  if (contributorsById.has(id)) return false;
+  contributorsById.set(id, null); // reserve the id so concurrent polls don't double-build
+
+  let config;
+  try {
+    config = await fetchJSON(`contributors/${id}/config.json`);
+  } catch (err) {
+    console.warn(`skipping contributor "${id}":`, err);
+    contributorsById.delete(id);
+    return false;
+  }
+
+  const plot = plots[index % PLOT_COUNT];
+  const seed = 100 + index * 37;
+  const estate = buildEstate(config, seed);
+
+  const yaw = rnd.hash(index, 8, 3) * Math.PI * 2;
+  orientOnPlanet(estate.group, plot.dir, plot.radius + 1.3, yaw, 0.8);
+  const baseScale = estate.group.scale.x;
+
+  const label = makeLabel(config.name || id);
+  label.position.copy(plot.dir).multiplyScalar(plot.radius + 1.3 + estate.roofY * 0.8 + 3.2);
+  scene.add(label);
+
+  const record = { id, config, plot, group: estate.group, label, roofY: estate.roofY };
+  contributorsById.set(id, record);
+  for (const mesh of estate.meshes) {
+    mesh.userData.contributorId = id;
+    clickables.push(mesh);
+  }
+  scene.add(estate.group);
+
+  const li = document.createElement('li');
+  const btn = document.createElement('button');
+  // textContent, never innerHTML: contributor strings are untrusted and this
+  // node lives in the host page, not the sandboxed iframe
+  const nameEl = document.createElement('span');
+  nameEl.textContent = config.name || id;
+  const tagEl = document.createElement('small');
+  tagEl.textContent = config.tagline || '';
+  btn.append(nameEl, tagEl);
+  btn.addEventListener('click', () => flyTo(id));
+  li.appendChild(btn);
+  rosterList.appendChild(li);
+  record.li = li;
+
+  // Freshness: a live-poll arrival is new by definition; a cold load defers to
+  // the per-browser seen-store. Either way, animate it in and flag it NEW.
+  let newSince = null;
+  if (announce) { newSince = Date.now(); markSeen(id, newSince); }
+  else newSince = freshnessFor(id);
+
+  if (newSince !== null) {
+    startSpawnAnimation(estate.group, baseScale);
+    addNewBadge(record, newSince);
+    li.classList.add('fresh');
+    if (announce) announceArrival(record);
+  }
+  return true;
+}
+
+// Grow the estate up out of the ground with a springy pop.
+function startSpawnAnimation(group, targetScale) {
+  group.scale.setScalar(0.0001);
+  spawnAnims.push({ group, targetScale, start: performance.now(), duration: 1200 });
+}
+
+function updateSpawnAnimations() {
+  for (let i = spawnAnims.length - 1; i >= 0; i--) {
+    const a = spawnAnims[i];
+    const k = Math.min(1, (performance.now() - a.start) / a.duration);
+    const c1 = 1.70158, c3 = c1 + 1;              // easeOutBack — a little overshoot
+    const e = 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2);
+    a.group.scale.setScalar(Math.max(0.0001, a.targetScale * e));
+    if (k >= 1) { a.group.scale.setScalar(a.targetScale); spawnAnims.splice(i, 1); }
+  }
+}
+
+function addNewBadge(record, newSince) {
+  const sprite = makeBadge('NEW');
+  sprite.position.copy(record.plot.dir)
+    .multiplyScalar(record.plot.radius + 1.3 + record.roofY * 0.8 + 7.0);
+  scene.add(sprite);
+  record.badge = sprite;
+  newBadges.push({ sprite, base: sprite.scale.clone(), expires: newSince + NEW_WINDOW_MS, record });
+}
+
+function updateNewBadges(elapsed) {
+  const now = Date.now();
+  for (let i = newBadges.length - 1; i >= 0; i--) {
+    const b = newBadges[i];
+    if (now > b.expires) {
+      scene.remove(b.sprite);
+      b.sprite.material.map.dispose();
+      b.sprite.material.dispose();
+      if (b.record.li) b.record.li.classList.remove('fresh');
+      newBadges.splice(i, 1);
+      continue;
+    }
+    const pulse = 1 + 0.1 * Math.sin(elapsed * 4.5);   // gentle heartbeat
+    b.sprite.scale.set(b.base.x * pulse, b.base.y * pulse, 1);
+  }
+}
+
+// Poll the manifest for newly-merged settlers and raise their houses live.
+let pollingStarted = false;
+let pollInFlight = false;
+function startLiveSettlerPolling(intervalMs = 45000) {
+  if (pollingStarted) return;
+  pollingStarted = true;
+  setInterval(async () => {
+    if (pollInFlight) return;
+    pollInFlight = true;
+    try {
+      const manifest = await fetchJSON('contributors/manifest.json', { bust: true });
+      const ids = manifest.contributors || [];
+      for (let i = 0; i < ids.length; i++) {
+        if (!contributorsById.has(ids[i])) await addSettler(ids[i], i, { announce: true });
+      }
+    } catch (err) {
+      console.warn('settler poll failed (will retry):', err.message);
+    } finally {
+      pollInFlight = false;
+    }
+  }, intervalMs);
+}
+
+function announceArrival(record) {
+  console.log(`🏠 new settler: ${record.config.name || record.id}`);
+  playArrivalChime();
+  const el = document.createElement('div');
+  el.className = 'arrival-toast';
+  el.textContent = `◆ ${record.config.name || record.id} just settled`;
+  el.addEventListener('click', () => flyTo(record.id));
+  toastLayer.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  setTimeout(() => {
+    el.classList.remove('show');
+    setTimeout(() => el.remove(), 600);
+  }, 9000);
+}
+
+// ------------------------------------------------------- 8-bit chime
+
+// Synthesized, not a file: keeps the page self-contained and CSP-clean.
+// Browsers block audio until a user gesture, so we unlock on first interaction.
+let audioCtx = null;
+function getAudioCtx() {
+  if (audioCtx === null) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    audioCtx = new AC();
+  }
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+window.addEventListener('pointerdown', getAudioCtx, { once: true });
+window.addEventListener('keydown', getAudioCtx, { once: true });
+
+function playArrivalChime() {
+  const ctx = getAudioCtx();
+  if (!ctx || ctx.state !== 'running') return;
+  const t0 = ctx.currentTime;
+  const master = ctx.createGain();
+  master.gain.value = 0.16;
+  master.connect(ctx.destination);
+
+  // rising square-wave arpeggio: C5 E5 G5 C6
+  [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => {
+    const t = t0 + i * 0.085;
+    const osc = ctx.createOscillator();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(f, t);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.9, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.11);
+    osc.connect(g); g.connect(master);
+    osc.start(t); osc.stop(t + 0.12);
+  });
+
+  // sparkle sweep to finish
+  const ts = t0 + 4 * 0.085;
+  const spark = ctx.createOscillator();
+  spark.type = 'triangle';
+  spark.frequency.setValueAtTime(1046.5, ts);
+  spark.frequency.exponentialRampToValueAtTime(2093, ts + 0.16);
+  const sg = ctx.createGain();
+  sg.gain.setValueAtTime(0.5, ts);
+  sg.gain.exponentialRampToValueAtTime(0.0001, ts + 0.28);
+  spark.connect(sg); sg.connect(master);
+  spark.start(ts); spark.stop(ts + 0.3);
 }
 
 // ------------------------------------------------------------ fauna
@@ -375,9 +572,26 @@ renderer.domElement.addEventListener('pointermove', (e) => {
   tooltip.style.top = e.clientY + 'px';
 });
 
-renderer.domElement.addEventListener('click', () => {
+// Distinguish a real click from the mouse-up at the end of an orbit drag, so
+// spinning the globe never accidentally triggers navigation or a reset.
+let pointerDownAt = null;
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  pointerDownAt = { x: e.clientX, y: e.clientY };
+});
+
+renderer.domElement.addEventListener('click', (e) => {
   if (flying || viewer.classList.contains('open')) return;
-  if (hoveredId) flyTo(hoveredId);
+  const moved = pointerDownAt
+    ? Math.hypot(e.clientX - pointerDownAt.x, e.clientY - pointerDownAt.y) : 0;
+  if (moved > 6) return; // it was a drag, not a click
+
+  if (hoveredId) {
+    flyTo(hoveredId);                 // clicked a house → visit it
+  } else if (mode === 'house') {
+    returnToGlobe();                  // clicked empty space while zoomed in → reset
+  } else {
+    hideCard();                       // clicked empty space on the globe → dismiss any card
+  }
 });
 
 function pick() {
@@ -523,6 +737,8 @@ function animate() {
   const sunDir = advanceSun(dt);
   const { nightF, duskF } = lightTheWorld(sunDir);
   fadeLabelsUpClose();
+  updateSpawnAnimations();
+  updateNewBadges(elapsed);
   updateFauna(elapsed);
   advanceFlight();
   tuneControlFeel();

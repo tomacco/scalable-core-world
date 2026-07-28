@@ -573,3 +573,41 @@ export function makeLabel(text) {
   sprite.scale.set(3.2 * aspect, 3.2, 1);
   return sprite;
 }
+
+// A bright gold "NEW" pill that floats over just-arrived houses.
+export function makeBadge(text = 'NEW') {
+  const canvas = document.createElement('canvas');
+  canvas.width = 220;
+  canvas.height = 110;
+  const c = canvas.getContext('2d');
+
+  c.fillStyle = '#e8b44a';
+  const x = 10, y = 14, w = 200, h = 58, r = 29;
+  c.beginPath();
+  c.roundRect(x, y, w, h, r);
+  c.fill();
+  c.strokeStyle = 'rgba(255,247,230,0.9)';
+  c.lineWidth = 4;
+  c.stroke();
+
+  c.fillStyle = '#e8b44a';
+  c.beginPath();
+  c.moveTo(canvas.width / 2, 92); c.lineTo(canvas.width / 2 - 11, 72); c.lineTo(canvas.width / 2 + 11, 72);
+  c.fill();
+
+  c.font = '700 40px "Unbounded", "IBM Plex Mono", monospace';
+  c.fillStyle = '#14100a';
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.letterSpacing = '4px';
+  c.fillText(text, canvas.width / 2 + 2, y + h / 2 + 1);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+  mat.depthWrite = false;
+  const sprite = new THREE.Sprite(mat);
+  sprite.renderOrder = 999;
+  sprite.scale.set(4.2, 2.1, 1);
+  return sprite;
+}
