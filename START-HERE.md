@@ -20,12 +20,15 @@ in the manifest. The full rulebook is [AGENTS.md](AGENTS.md).
 ## 📋 The prompt — copy everything in this box
 
 ```text
-I want to claim my plot in the Scalable Core World (this repo).
+I want to claim my plot in the Scalable Core World.
 
-Start by reading AGENTS.md — it's the rulebook. Follow it exactly: I only get
-my own folder at contributors/<my-handle>/ plus ONE appended line in
-contributors/manifest.json. Never touch the engine, the docs, or anyone else's
-folder, and stage files by explicit path (never `git add -A`).
+If you're not already inside the repo, clone it and work from there:
+  git clone https://github.com/tomacco/scalable-core-world
+  cd scalable-core-world
+Then read AGENTS.md — it's the rulebook — and START-HERE.md. Follow the rules
+exactly: I only get my own folder at contributors/<my-handle>/ plus ONE
+appended line in contributors/manifest.json. Never touch the engine, the docs,
+or anyone else's folder, and stage files by explicit path (never `git add -A`).
 
 Then interview me before building anything. Ask in small batches, and offer a
 sensible default for every option so I can just say "default":
