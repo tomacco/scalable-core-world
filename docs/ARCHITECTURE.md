@@ -35,12 +35,17 @@ Isolation is enforced four times, at different layers:
 | Layer | Mechanism | Catches |
 |---|---|---|
 | Social | `AGENTS.md` (the law) | agents that read instructions |
-| Review | `.github/CODEOWNERS` | engine changes without owner approval |
-| CI | `scripts/validate-contribution.mjs` | territory, schema, size, PII violations |
-| Runtime | `<iframe sandbox>` + `JSON.parse` | anything that slipped through |
+| Review | `.github/CODEOWNERS` (incl. `* @tomacco` catch-all) | any file outside a settler folder — engine, CI, or a new top-level file like `CNAME` |
+| CI | `scripts/validate-contribution.mjs` | territory, manifest order, schema, size, PII, and a site-content scan for secrets/trackers/off-site calls/frame probing |
+| Runtime | `<iframe sandbox>` (opaque origin) + `textContent` rendering + `JSON.parse` | site breakout, host-page XSS via `name`/`tagline`, malformed config |
 
 Never rely on only the social layer. Agents are obedient but fallible;
-the mechanical layers make the rules true rather than merely stated.
+the mechanical layers make the rules true rather than merely stated. Two red-
+team findings shaped this table: a stored XSS through `config.name` (rendered
+in the host page, outside the sandbox — now `textContent`) and a `CNAME`
+domain-hijack that no CODEOWNERS rule guarded (now the `*` catch-all). When
+you add a feature that renders contributor data or accepts a new file type,
+add its guardrail in the same PR.
 
 ## Engine module map
 

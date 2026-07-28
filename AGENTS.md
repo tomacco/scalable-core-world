@@ -32,15 +32,22 @@ Rules, in order of importance:
    the GitHub Pages plumbing (`.nojekyll`). If the engine has a bug, open an
    issue instead.
 2. **Never modify another contributor's folder.** Not even formatting fixes.
-3. In `contributors/manifest.json`, **only append your slug** to the end of the
-   `contributors` array. Never reorder or remove entries — the array index
-   determines plot assignment, so reordering would move everyone's houses.
+3. In `contributors/manifest.json`, **append exactly one entry — your slug —
+   to the end of the `contributors` array.** (In JSON this touches two lines:
+   your new line plus a comma on the previous one. That's fine — the check is
+   about array *order*, not raw line count.) Never reorder or remove existing
+   entries: the array index is the plot assignment, so reordering moves
+   everyone's houses.
 4. Everything inside `contributors/<your-slug>/` is yours: add pages, images,
    CSS, whatever the website needs.
+5. **Stage by explicit path, never `git add -A`/`git commit -a`.** The working
+   tree may be shared or already dirty; blanket-staging can sweep in files you
+   never touched. Stage only `contributors/<your-slug>/` and the manifest.
 
 Your slug is the contributor's **public handle** in kebab-case (lowercase,
 hyphens) — their GitHub username or a chosen alias, e.g. `tomacco`. It must be
-unique in the manifest. **Never use a legal full name as a slug** (see §2a).
+unique in the manifest. **Never use a legal full name** (first-and-last) as a
+slug or sign; a single first name or invented alias is fine (see §2a).
 
 ---
 
@@ -127,6 +134,16 @@ by **handles, not identities**.
   `<link>`, and `<script src>` assets work fine.
 - No autoplaying audio, no crypto miners, no service workers, no obfuscated
   or minified-beyond-review code.
+- **No off-site network calls**: no `fetch`/`XMLHttpRequest`/`WebSocket`/
+  `sendBeacon` to other domains, and no third-party `<script src>` except the
+  allowed CDNs (jsDelivr, unpkg) and Google Fonts. Bundle what you need.
+
+> These are not honor-system rules. CI (`scripts/validate-contribution.mjs`)
+> scans every settlement PR and **blocks** merges that carry PII, secrets,
+> trackers, off-site calls, service workers, `window.parent`/`postMessage`
+> probing, markup or control chars in config strings, path-escaping `site`
+> values, or oversized files. The engine also renders your `name`/`tagline`
+> as plain text and sandboxes your site. Assume every rule here is checked.
 
 ---
 
@@ -228,7 +245,8 @@ Open `http://localhost:8080` and check:
 - [ ] Clicking the house → "Enter the house" shows your website.
 - [ ] The browser console shows no errors (a skipped settler logs a warning
       naming your slug — that means your `config.json` is malformed).
-- [ ] `manifest.json` diff shows exactly one added line.
+- [ ] `manifest.json` diff adds exactly one entry (your slug) and reorders
+      nothing.
 
 `fetch()` does not work over `file://` — always use a local server.
 
