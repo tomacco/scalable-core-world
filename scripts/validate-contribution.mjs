@@ -5,7 +5,7 @@
 
 import { execSync } from 'node:child_process';
 import { readFileSync, statSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 
 const baseRef = process.argv[2] || 'origin/main';
 const actor = process.env.PR_ACTOR || '';
@@ -14,6 +14,8 @@ const actorIsOwner = actor !== '' && actor === owner;
 
 const errors = [];
 const warnings = [];
+
+const CONTROL_CHARS = /[\x00-\x1f\x7f]/;
 
 main();
 
@@ -28,9 +30,22 @@ function main() {
   for (const slug of slugs) {
     checkConfig(slug);
     checkSizeBudget(slug);
-    checkPII(changed.filter((f) => f.startsWith(`contributors/${slug}/`)));
+    const own = changed.filter((f) => f.startsWith(`contributors/${slug}/`));
+    checkPII(own);
+    checkSiteContent(own);
   }
+  reviewerSummary(changed, slugs);
   report();
+}
+
+// A glance-friendly digest so a human reviewer sees the load-bearing facts
+// (engine files touched, folders added) without trusting the commit title.
+function reviewerSummary(changed, slugs) {
+  const outside = changed.filter((f) => !f.startsWith('contributors/'));
+  console.log('── review summary ──');
+  console.log(`settler folders touched: ${slugs.length ? slugs.join(', ') : 'none'}`);
+  console.log(`files outside contributors/: ${outside.length ? outside.join(', ') : 'none'}`);
+  console.log('────────────────────\n');
 }
 
 // ------------------------------------------------------------ checks
@@ -82,6 +97,16 @@ function checkConfig(slug) {
     return errors.push(`${slug}: config.json is not valid JSON (${e.message}) — the engine will silently skip this settler`);
   }
   if (typeof cfg.name !== 'string' || !cfg.name.trim()) errors.push(`${slug}: config.name (public handle) is required`);
+
+  // Rendered strings must be plain text — the engine shows name/tagline in the
+  // host page. Reject angle brackets, control chars, and absurd lengths so a
+  // config can never carry markup or an injection payload.
+  for (const [where, value] of textFields(cfg)) {
+    if (/[<>]/.test(value)) errors.push(`${slug}: ${where} may not contain "<" or ">" — plain text only (prevents injection)`);
+    if (CONTROL_CHARS.test(value)) errors.push(`${slug}: ${where} contains control characters`);
+    if (value.length > 120) errors.push(`${slug}: ${where} is ${value.length} chars — keep it under 120`);
+  }
+
   const hex = /^#[0-9a-fA-F]{6}$/;
   for (const [where, value] of colorFields(cfg)) {
     if (!hex.test(value)) errors.push(`${slug}: ${where} = "${value}" is not a #rrggbb color`);
@@ -99,9 +124,20 @@ function checkConfig(slug) {
   }
   const trees = cfg.garden?.trees;
   if (trees != null && (!Number.isInteger(trees) || trees < 0 || trees > 6)) errors.push(`${slug}: garden.trees must be an integer 0–6`);
-  const site = cfg.site || 'site/index.html';
-  if (site.includes('..') || site.startsWith('/')) errors.push(`${slug}: config.site must be a relative path inside your folder`);
-  else if (!existsSync(join('contributors', slug, site))) errors.push(`${slug}: site entry "${site}" does not exist`);
+  checkSitePath(slug, cfg.site || 'site/index.html');
+}
+
+// config.site must resolve to a plain relative path inside the contributor's
+// own folder — no traversal, no absolute paths (unix OR windows), no URLs.
+function checkSitePath(slug, site) {
+  if (typeof site !== 'string' || !site.trim()) return errors.push(`${slug}: config.site must be a non-empty string`);
+  if (site.includes('..')) return errors.push(`${slug}: config.site may not contain ".." (traversal)`);
+  if (site.startsWith('/') || /^[a-zA-Z]:/.test(site) || site.includes('\\')) return errors.push(`${slug}: config.site must be a relative path (no leading "/", drive letter, or backslash)`);
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(site)) return errors.push(`${slug}: config.site may not be a URL`);
+  const base = resolve('contributors', slug);
+  const target = resolve(base, site);
+  if (target !== base && !target.startsWith(base + sep)) return errors.push(`${slug}: config.site "${site}" escapes your folder`);
+  if (!existsSync(join('contributors', slug, site))) errors.push(`${slug}: site entry "${site}" does not exist`);
 }
 
 function colorFields(cfg) {
@@ -113,6 +149,21 @@ function colorFields(cfg) {
       if (typeof v === 'string' && v.startsWith('#')) out.push([p, v]);
       else if (Array.isArray(v)) v.forEach((item, i) => { if (typeof item === 'string' && item.startsWith('#')) out.push([`${p}[${i}]`, item]); });
       else walk(v, p);
+    }
+  };
+  walk(cfg, '');
+  return out;
+}
+
+// every non-color string in the config (these may be rendered)
+function textFields(cfg) {
+  const out = [];
+  const walk = (obj, path) => {
+    if (obj == null || typeof obj !== 'object') return;
+    for (const [k, v] of Object.entries(obj)) {
+      const p = path ? `${path}.${k}` : k;
+      if (typeof v === 'string' && !v.startsWith('#')) out.push([p, v]);
+      else if (v && typeof v === 'object' && !Array.isArray(v)) walk(v, p);
     }
   };
   walk(cfg, '');
@@ -143,7 +194,33 @@ function checkPII(files) {
     const emailHit = text.match(email);
     if (emailHit) errors.push(`${f}: contains an email address ("${emailHit[0]}") — no PII (AGENTS.md §2a)`);
     const phoneHit = text.match(phone);
-    if (phoneHit) warnings.push(`${f}: "${phoneHit[0]}" looks like a phone number — verify it is not PII`);
+    if (phoneHit) errors.push(`${f}: contains "${phoneHit[0]}" — looks like a phone number; no PII (AGENTS.md §2a). If this is not a phone, reword it.`);
+  }
+}
+
+// Scans site source for behavior AGENTS.md §2a forbids but that the sandbox
+// alone can't guarantee: parent-frame probing, off-site network calls,
+// trackers, service workers, and committed secrets.
+function checkSiteContent(files) {
+  const codeExt = /\.(html?|js|mjs)$/i;
+  const RULES = [
+    [/\bwindow\.(parent|top)\b/, 'reaches window.parent/top (frame-breakout attempt)'],
+    [/\bpostMessage\s*\(/, 'uses postMessage to the host page'],
+    [/\b(fetch|XMLHttpRequest|WebSocket|EventSource)\s*\(\s*['"`]?https?:/i, 'makes an off-site network request (no tracking/beacons — AGENTS.md §2a)'],
+    [/navigator\.sendBeacon\s*\(/, 'uses navigator.sendBeacon (tracking)'],
+    [/serviceWorker\s*\.\s*register\s*\(/, 'registers a service worker (not allowed)'],
+    [/<script[^>]+src\s*=\s*['"]https?:\/\/(?!(?:cdn\.jsdelivr\.net|fonts\.googleapis\.com|fonts\.gstatic\.com|unpkg\.com))/i, 'loads a third-party script from an unapproved host'],
+    [/\bsk_live_[a-zA-Z0-9]{8,}/, 'contains a live secret key (sk_live_…)'],
+    [/\bAKIA[0-9A-Z]{16}\b/, 'contains an AWS access key id'],
+    [/\bghp_[a-zA-Z0-9]{20,}/, 'contains a GitHub token (ghp_…)'],
+    [/-----BEGIN (?:RSA |EC |OPENSSH |PGP )?PRIVATE KEY-----/, 'contains a private key'],
+  ];
+  for (const f of files) {
+    if (!codeExt.test(f) || !existsSync(f)) continue;
+    const text = readFileSync(f, 'utf8');
+    for (const [re, why] of RULES) {
+      if (re.test(text)) errors.push(`${f}: ${why}`);
+    }
   }
 }
 

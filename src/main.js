@@ -246,7 +246,13 @@ async function loadContributors() {
 
     const li = document.createElement('li');
     const btn = document.createElement('button');
-    btn.innerHTML = `${config.name || id}<small>${config.tagline || ''}</small>`;
+    // textContent, never innerHTML: contributor strings are untrusted and this
+    // node lives in the host page, not the sandboxed iframe
+    const nameEl = document.createElement('span');
+    nameEl.textContent = config.name || id;
+    const tagEl = document.createElement('small');
+    tagEl.textContent = config.tagline || '';
+    btn.append(nameEl, tagEl);
     btn.addEventListener('click', () => flyTo(id));
     li.appendChild(btn);
     rosterList.appendChild(li);

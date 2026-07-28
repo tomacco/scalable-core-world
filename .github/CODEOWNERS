@@ -1,3 +1,9 @@
+# Everything defaults to owner review; the rules below are already owner-owned,
+# but this catch-all means ANY new top-level file (CNAME, _config.yml, a
+# service worker, workflow additions) also requires owner approval — closing
+# the domain-hijack / config-injection gap.
+*                   @tomacco
+
 # The engine, the laws, and the CI belong to the world owner.
 # Contributor PRs that touch these files require owner review.
 /index.html         @tomacco
