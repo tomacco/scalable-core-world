@@ -6,11 +6,11 @@ import { makeNoise } from './noise.js';
 
 export const PLANET_RADIUS = 38;
 export const SEA_LEVEL = 38.0;
-export const PLOT_COUNT = 20;
+export const PLOT_COUNT = 16;
 
 const AMP = 5.2;              // terrain amplitude in voxels
-const PLOT_INNER = 0.24;      // radians: fully flat plot cap
-const PLOT_OUTER = 0.38;      // radians: blend back into wild terrain
+const PLOT_INNER = 0.30;      // radians: fully flat plot cap (generous estates)
+const PLOT_OUTER = 0.44;      // radians: blend back into wild terrain
 
 const noise = makeNoise(20260728);
 

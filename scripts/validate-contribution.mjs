@@ -87,10 +87,12 @@ function checkConfig(slug) {
     if (!hex.test(value)) errors.push(`${slug}: ${where} = "${value}" is not a #rrggbb color`);
   }
   const enums = [
+    ['avatar.size', cfg.avatar?.size, ['small', 'medium', 'large', 'giant']],
     ['avatar.hair.style', cfg.avatar?.hair?.style, ['short', 'long', 'bun', 'mohawk', 'curly', 'bald']],
     ['avatar.outfit.type', cfg.avatar?.outfit?.type, ['pants', 'dress']],
     ['avatar.hat.style', cfg.avatar?.hat?.style, ['cap', 'beanie', 'crown', 'wizard', 'none']],
     ['house.size', cfg.house?.size, ['small', 'medium', 'large']],
+    ['garden.platform', cfg.garden?.platform, ['cozy', 'grand']],
   ];
   for (const [where, value, allowed] of enums) {
     if (value != null && !allowed.includes(value)) errors.push(`${slug}: ${where} = "${value}" (allowed: ${allowed.join(', ')})`);

@@ -44,6 +44,20 @@ unique in the manifest. **Never use a legal full name as a slug** (see §2a).
 
 ---
 
+## 1a. Helper agents (the fast path)
+
+This repo ships specialist agents in `.claude/agents/`. If your tool supports
+subagents, use them instead of doing everything by hand:
+
+- **settler-guide** — runs the whole settlement ceremony end to end.
+- **avatar-artisan** — designs just your voxel avatar (edits the `avatar`
+  block; sizes from villager to a house-tall `giant`).
+- **homestead-designer** — designs your house, garden, and terrace (edits
+  the `house` and `garden` blocks; `cozy` or `grand` platform).
+
+They already know these rules and stay inside your folder. A human can also
+run `/settle` if the workshop skill is installed.
+
 ## 2. The interview — ask your developer before building
 
 Do not invent a persona. Ask the contributor these questions (conversationally,
@@ -128,6 +142,7 @@ Colors are hex strings.
   "site": "site/index.html",           // entry page, relative to your folder
 
   "avatar": {
+    "size": "small",                   // small|medium|large|giant (giant = house-tall)
     "skin": "#e0ac69",
     "eyes": "#26262e",
     "hair": { "style": "long", "color": "#2c1b10" },  // short|long|bun|mohawk|curly|bald
@@ -149,6 +164,7 @@ Colors are hex strings.
   },
 
   "garden": {
+    "platform": "cozy",                // "cozy" | "grand" (grand = larger terrace)
     "trees": 2,                        // 0–6
     "flowers": ["#ff5f8f", "#ffd23f"], // list of petal colors; [] for none
     "fence": true,

@@ -135,8 +135,12 @@ const HOUSE_SIZES = {
   large: { w: 11, d: 8, h: 5 },
 };
 
+// giant stands eye to eye with a rooftop
+const AVATAR_SIZES = { small: 0.42, medium: 0.6, large: 0.8, giant: 0.95 };
+
 export function buildAvatar(avatar = {}) {
   const a = {
+    size: 'small',
     skin: '#e0ac69',
     eyes: '#26262e',
     hair: { style: 'short', color: '#2c1b10' },
@@ -150,7 +154,7 @@ export function buildAvatar(avatar = {}) {
   a.hair = { style: 'short', color: '#2c1b10', ...(avatar.hair || {}) };
   a.outfit = { type: 'pants', top: '#c94f30', bottom: '#2b3a67', shoes: '#26211c', ...(avatar.outfit || {}) };
 
-  const b = new VoxelBuilder(0.42);
+  const b = new VoxelBuilder(AVATAR_SIZES[a.size] || AVATAR_SIZES.small);
 
   // shoes + legs / dress
   b.box(-1, 0, 0, a.outfit.shoes);
@@ -242,14 +246,14 @@ export function buildEstate(config, seed = 1) {
   };
   const garden = {
     trees: 2, flowers: ['#ff5f8f', '#ffd23f'], fence: true,
-    lamp: true, path: true, extras: [],
+    lamp: true, path: true, extras: [], platform: 'cozy',
     ...(config.garden || {}),
   };
   const size = HOUSE_SIZES[house.size] || HOUSE_SIZES.medium;
   const { w, d, h } = size;
   const hw = (w - 1) / 2;
   const z0 = -Math.floor(d / 2), z1 = z0 + d - 1;
-  const P = 7; // platform half-width
+  const P = garden.platform === 'grand' ? 9 : 7; // platform half-width
 
   const b = new VoxelBuilder(1);
 

@@ -3,6 +3,7 @@
   "tagline": "founder of the core world",
   "site": "site/index.html",
   "avatar": {
+    "size": "giant",
     "skin": "#e0ac69",
     "eyes": "#26262e",
     "hair": { "style": "short", "color": "#2c1b10" },
@@ -20,6 +21,7 @@
     "windowsLit": true
   },
   "garden": {
+    "platform": "grand",
     "trees": 2,
     "flowers": ["#ff5f8f", "#ffd23f", "#7ec8e3"],
     "fence": true,
