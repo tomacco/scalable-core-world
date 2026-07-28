@@ -19,7 +19,13 @@ raises the homestead in a single pull request.
 - **Drag** to spin the globe, **scroll** to zoom — all the way down to terrain
   level. The planet core is always the pivot; there is no panning.
 - **Click a house** (or a name in the *Settlers* roster) and the camera flies
-  over: now the *house* is your orbit pivot. Return with **🌍 Planet view** or `Esc`.
+  over: now the *house* is your orbit pivot. **Click empty space** (or press
+  `Esc` / **🌍 Planet view**) to fly back out to the globe.
+- New settlers appear **live** — the world re-scans the manifest every 45s, and
+  a freshly-merged house grows in with a spawn animation, a **NEW** badge (5
+  min), and an 8-bit chime.
+- **Host panel:** press **D** (or open `#dev`) for a live feed of pending pull
+  requests and a countdown to the next settler scan, with a "scan now" button.
 - Use the sky console (top right) to summon **dawn, noon, dusk, night — or the
   aurora borealis** over the pole.
 - The wilds are alive: forests, bushes, wildflowers, mushrooms, rocks — plus

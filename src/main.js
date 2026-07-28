@@ -23,6 +23,9 @@ const homeBtn = $('homeBtn');
 const rosterList = $('rosterList');
 const clockTime = $('clocktime'), speedBtn = $('speedBtn');
 const toastLayer = $('toastLayer');
+const devToggle = $('devToggle'), devpanel = $('devpanel'), devClose = $('devClose');
+const scanCountdown = $('scanCountdown'), scanNowBtn = $('scanNowBtn'), settlerCount = $('settlerCount');
+const prList = $('prList'), prCount = $('prCount'), prRefreshBtn = $('prRefreshBtn'), prFoot = $('prFoot');
 
 // -------------------------------------------------------- renderer
 
@@ -372,13 +375,142 @@ function updateNewBadges(elapsed) {
 }
 
 // Poll the manifest for newly-merged settlers and raise their houses live.
+// A self-rescheduling timeout (not a fixed interval) so the dev panel can read
+// the countdown and trigger an immediate rescan.
+const SETTLER_SCAN_MS = 45000;
 let pollingStarted = false;
 let pollInFlight = false;
-function startLiveSettlerPolling(intervalMs = 45000) {
+let nextScanAt = 0;
+let scanTimer = null;
+
+function startLiveSettlerPolling() {
   if (pollingStarted) return;
   pollingStarted = true;
-  setInterval(async () => {
-    if (pollInFlight) return;
+  scheduleScan(SETTLER_SCAN_MS);
+}
+
+function scheduleScan(delayMs) {
+  nextScanAt = Date.now() + delayMs;
+  clearTimeout(scanTimer);
+  scanTimer = setTimeout(runSettlerScan, delayMs);
+}
+
+function scanForSettlersNow() { scheduleScan(0); }
+
+// ---------------------------------------------------- dev / host panel
+
+// Reads open PRs straight from the public GitHub API (CORS-enabled) so the
+// host can see what's queued and when the next settler scan fires.
+const GH_REPO = detectRepo();
+const PR_THROTTLE_MS = 75000; // unauthenticated API allows 60 req/h — stay well under
+
+function detectRepo() {
+  const host = location.hostname;
+  const seg = location.pathname.split('/').filter(Boolean);
+  if (host.endsWith('github.io') && seg.length) return `${host.split('.')[0]}/${seg[0]}`;
+  return 'tomacco/scalable-core-world';
+}
+
+let devOpen = false;
+function setDevOpen(open) {
+  devOpen = open;
+  devpanel.hidden = !open;
+  devToggle.style.display = open ? 'none' : '';
+  if (open) refreshPRs();
+}
+devToggle.addEventListener('click', () => setDevOpen(true));
+devClose.addEventListener('click', () => setDevOpen(false));
+scanNowBtn.addEventListener('click', scanForSettlersNow);
+prRefreshBtn.addEventListener('click', () => refreshPRs(true));
+window.addEventListener('keydown', (e) => {
+  if ((e.key === 'd' || e.key === 'D') && !e.metaKey && !e.ctrlKey && !e.altKey) setDevOpen(!devOpen);
+});
+if (/(^|[#&])dev\b/.test(location.hash)) setDevOpen(true); // deep link: #dev
+
+function countLiveSettlers() {
+  let n = 0;
+  for (const v of contributorsById.values()) if (v) n++;
+  return n;
+}
+
+// One tick drives the countdown, the settler count, and lazy PR auto-refresh.
+setInterval(() => {
+  if (!devOpen) return;
+  const secs = Math.max(0, Math.ceil((nextScanAt - Date.now()) / 1000));
+  scanCountdown.textContent = pollInFlight ? 'scanning…' : `${secs}s`;
+  settlerCount.textContent = countLiveSettlers();
+  if (Date.now() - lastPRFetch > PR_THROTTLE_MS) refreshPRs();
+}, 500);
+
+let prFetchInFlight = false;
+let lastPRFetch = 0;
+async function refreshPRs(force = false) {
+  if (prFetchInFlight) return;
+  if (!force && Date.now() - lastPRFetch < PR_THROTTLE_MS) return;
+  prFetchInFlight = true;
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${GH_REPO}/pulls?state=open&per_page=20&sort=created&direction=asc`,
+      { headers: { Accept: 'application/vnd.github+json' }, cache: 'no-store' }
+    );
+    lastPRFetch = Date.now();
+    if (res.status === 403) return renderPRError('GitHub API rate-limited — retrying soon');
+    if (!res.ok) return renderPRError(`GitHub API error ${res.status}`);
+    renderPRs(await res.json());
+  } catch {
+    renderPRError('could not reach the GitHub API');
+  } finally {
+    prFetchInFlight = false;
+  }
+}
+
+function renderPRs(prs) {
+  prCount.textContent = `(${prs.length})`;
+  prList.replaceChildren();
+  if (!prs.length) {
+    prFoot.textContent = `updated ${new Date().toLocaleTimeString()}`;
+    const li = document.createElement('li');
+    li.className = 'dev-empty';
+    li.textContent = 'no open PRs — the queue is clear';
+    prList.appendChild(li);
+    return;
+  }
+  for (const pr of prs) {
+    const li = document.createElement('li');
+    const row = document.createElement('div');
+    row.className = 'pr-row';
+    const num = document.createElement('span');
+    num.className = 'pr-num';
+    num.textContent = `#${pr.number}`;
+    const title = document.createElement('span');
+    title.className = 'pr-title';
+    title.textContent = pr.title;            // textContent: PR titles are untrusted
+    row.append(num, title);
+    const meta = document.createElement('span');
+    meta.className = 'pr-meta';
+    meta.textContent = `@${pr.user?.login ?? '?'} · ${pr.head?.ref ?? '?'}${pr.draft ? ' · draft' : ''}`;
+    li.append(row, meta);
+    if (typeof pr.html_url === 'string' && pr.html_url.startsWith('https://github.com/')) {
+      li.style.cursor = 'pointer';
+      li.title = 'open on GitHub';
+      li.addEventListener('click', () => window.open(pr.html_url, '_blank', 'noopener'));
+    }
+    prList.appendChild(li);
+  }
+  prFoot.textContent = `updated ${new Date().toLocaleTimeString()} · click a PR to open it`;
+}
+
+function renderPRError(msg) {
+  prCount.textContent = '(?)';
+  prList.replaceChildren();
+  const li = document.createElement('li');
+  li.className = 'dev-empty';
+  li.textContent = msg;
+  prList.appendChild(li);
+}
+
+async function runSettlerScan() {
+  if (!pollInFlight) {
     pollInFlight = true;
     try {
       const manifest = await fetchJSON('contributors/manifest.json', { bust: true });
@@ -391,7 +523,8 @@ function startLiveSettlerPolling(intervalMs = 45000) {
     } finally {
       pollInFlight = false;
     }
-  }, intervalMs);
+  }
+  scheduleScan(SETTLER_SCAN_MS);
 }
 
 function announceArrival(record) {

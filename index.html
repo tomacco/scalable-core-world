@@ -118,6 +118,59 @@
   }
   @keyframes freshpulse { 0%,100% { opacity: 1 } 50% { opacity: .5 } }
 
+  /* ---------- dev / host panel ---------- */
+  #devToggle {
+    position: fixed; z-index: 23; top: 130px; right: 32px;
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+    background: var(--panel); color: var(--ink-dim); border: 1px solid var(--hairline);
+    padding: 7px 11px; cursor: pointer; backdrop-filter: blur(8px);
+    transition: color .25s, border-color .25s;
+  }
+  #devToggle:hover { color: var(--gold); border-color: var(--gold-soft); }
+  #devpanel {
+    top: 130px; right: 32px; width: 300px; z-index: 24;
+    background: var(--panel); border: 1px solid var(--hairline); border-top: 1px solid var(--gold-soft);
+    backdrop-filter: blur(14px); padding: 0; font-size: 11px; color: var(--ink);
+  }
+  #devpanel[hidden] { display: none; }
+  .dev-head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 14px; border-bottom: 1px solid var(--hairline);
+    font-family: var(--display); font-weight: 500; font-size: 10px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--gold);
+  }
+  .dev-head button { background: none; border: none; color: var(--ink-dim); cursor: pointer; font-size: 12px; }
+  .dev-head button:hover { color: var(--ink); }
+  .dev-scan { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; }
+  .dev-timer { letter-spacing: 0.08em; color: var(--ink-dim); }
+  .dev-timer b { color: var(--gold); font-variant-numeric: tabular-nums; }
+  #scanNowBtn, #prRefreshBtn {
+    font-family: var(--mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase;
+    background: none; color: var(--ink-dim); border: 1px solid var(--hairline); padding: 5px 9px; cursor: pointer;
+    transition: color .2s, border-color .2s;
+  }
+  #scanNowBtn:hover, #prRefreshBtn:hover { color: var(--gold); border-color: var(--gold-soft); }
+  .dev-stat { padding: 0 14px 12px; color: var(--ink-dim); letter-spacing: 0.06em; }
+  .dev-stat span { color: var(--ink); }
+  .dev-prs-head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 14px; border-top: 1px solid var(--hairline);
+    text-transform: uppercase; letter-spacing: 0.18em; font-size: 9px; color: var(--ink-dim);
+  }
+  .dev-prs-head b { color: var(--gold); }
+  #prList { list-style: none; max-height: 260px; overflow-y: auto; }
+  #prList li { padding: 9px 14px; border-top: 1px solid rgba(232,228,216,0.07); }
+  #prList li.dev-empty { color: var(--ink-dim); font-style: italic; border: none; }
+  .pr-row { display: flex; gap: 8px; align-items: baseline; }
+  .pr-num { color: var(--gold); font-weight: 500; }
+  .pr-title { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .pr-meta { display: block; margin-top: 3px; color: var(--ink-dim); font-size: 9.5px; letter-spacing: 0.04em; }
+  .pr-ci { font-size: 9px; padding: 1px 5px; border-radius: 2px; letter-spacing: 0.1em; }
+  .pr-ci.pass { color: #7fd18a; border: 1px solid rgba(127,209,138,.4); }
+  .pr-ci.fail { color: #e07a5f; border: 1px solid rgba(224,122,95,.4); }
+  .pr-ci.pending { color: #e8b44a; border: 1px solid var(--gold-soft); }
+  .dev-foot { padding: 8px 14px 12px; color: var(--ink-dim); font-size: 9px; letter-spacing: 0.06em; }
+  .dev-foot a { color: var(--gold); text-decoration: none; }
+
   /* ---------- hover tooltip ---------- */
   #tooltip {
     position: fixed; z-index: 25; pointer-events: none; opacity: 0; transition: opacity .15s;
@@ -248,6 +301,25 @@
   <div id="tooltip"></div>
 
   <div id="toastLayer"></div>
+
+  <button id="devToggle" title="Host panel (D)">⚙ Dev</button>
+  <div class="hud" id="devpanel" hidden>
+    <div class="dev-head">
+      <span>Host · Settler Feed</span>
+      <button id="devClose" title="Close (D)">✕</button>
+    </div>
+    <div class="dev-scan">
+      <div class="dev-timer">next scan <b><span id="scanCountdown">—</span></b></div>
+      <button id="scanNowBtn">scan now</button>
+    </div>
+    <div class="dev-stat"><span id="settlerCount">0</span> settlers live on the planet</div>
+    <div class="dev-prs-head">
+      <span>Pending PRs <b id="prCount">(…)</b></span>
+      <button id="prRefreshBtn" title="Refresh">⟳</button>
+    </div>
+    <ul id="prList"><li class="dev-empty">loading…</li></ul>
+    <div class="dev-foot" id="prFoot"></div>
+  </div>
 
   <div id="card">
     <div class="kicker">You have arrived at the home of</div>
