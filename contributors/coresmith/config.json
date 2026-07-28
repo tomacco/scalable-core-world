@@ -1,0 +1,32 @@
+{
+  "name": "coresmith",
+  "tagline": "perpetual tinkerer",
+  "site": "site/index.html",
+  "avatar": {
+    "size": "large",
+    "skin": "#d8a878",
+    "eyes": "#3a2e26",
+    "hair": { "style": "bald", "color": "#4a3b30" },
+    "beard": true,
+    "glasses": false,
+    "outfit": { "type": "pants", "top": "#6b7580", "bottom": "#3a3f47", "shoes": "#2a2622" },
+    "hat": { "style": "cap", "color": "#3b4a5a" }
+  },
+  "house": {
+    "size": "small",
+    "wall": "#cdbb97",
+    "roof": "#7a8a94",
+    "door": "#5b3a22",
+    "trim": "#b08d57",
+    "windowsLit": true
+  },
+  "garden": {
+    "platform": "grand",
+    "trees": 2,
+    "flowers": ["#d9a441", "#7ea8be"],
+    "fence": false,
+    "lamp": true,
+    "path": false,
+    "extras": ["bench"]
+  }
+}
