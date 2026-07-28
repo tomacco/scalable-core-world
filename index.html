@@ -230,7 +230,9 @@
 
   <button id="homeBtn">🌍 Planet view</button>
 
-  <div id="viewer"><iframe id="siteFrame" title="contributor site" src="about:blank"></iframe></div>
+  <!-- contributor sites run sandboxed: scripts yes, but no access to the
+       parent page, cookies, or storage (opaque origin) -->
+  <div id="viewer"><iframe id="siteFrame" title="contributor site" src="about:blank" sandbox="allow-scripts allow-popups"></iframe></div>
   <button id="backBtn">← Back to the planet</button>
   <div id="flash"></div>
 

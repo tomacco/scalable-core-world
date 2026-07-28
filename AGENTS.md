@@ -38,8 +38,9 @@ Rules, in order of importance:
 4. Everything inside `contributors/<your-slug>/` is yours: add pages, images,
    CSS, whatever the website needs.
 
-Your slug is the contributor's full name in **kebab-case** (lowercase,
-hyphens): `Ivan Gonzalez` → `ivan-gonzalez`. It must be unique in the manifest.
+Your slug is the contributor's **public handle** in kebab-case (lowercase,
+hyphens) — their GitHub username or a chosen alias, e.g. `tomacco`. It must be
+unique in the manifest. **Never use a legal full name as a slug** (see §2a).
 
 ---
 
@@ -49,7 +50,8 @@ Do not invent a persona. Ask the contributor these questions (conversationally,
 not as a form) and map the answers onto the config schema:
 
 **Identity**
-- What name should appear on the sign above your house?
+- What **handle or alias** should appear on the sign above your house?
+  (GitHub username is the natural choice — never push for a legal name.)
 - One short tagline (a few words) shown when visitors arrive?
 - What topic do you want your website to be about?
 
@@ -69,6 +71,51 @@ If an answer is missing, use tasteful defaults — but never skip the interview.
 
 ---
 
+## 2a. Guardrails — non-negotiable
+
+These rules are enforced by CI on every pull request, by `CODEOWNERS` on the
+engine, and by an iframe sandbox at runtime. A violation blocks the merge.
+
+### Privacy — no PII, anywhere
+This is a public repository on a public website. Contributors are represented
+by **handles, not identities**.
+
+- ✅ Allowed: a public handle/alias, links to public profiles the contributor
+  chooses to share (GitHub, personal site), a fictional voxel avatar.
+- ⛔ Never commit: legal full names, email addresses, phone numbers, home or
+  work addresses, birthdays, government IDs, employer/team/org details,
+  photographs of people, or geolocation data (strip EXIF from any image).
+- This applies to *everyone*: don't mention other people's PII on your site
+  either. If the contributor dictates text containing PII, warn them and ask
+  for a redacted version.
+
+### Territory — you get one folder
+- Write only inside `contributors/<your-slug>/`, plus the single appended
+  line in `manifest.json`. **Nothing else. Ever.** Not the engine, not the
+  docs, not the CI, not another settler's land, not "just a small fix".
+- One pull request = one contributor. Don't batch settlements.
+
+### Content standards
+- The world is shown on conference screens: keep everything you commit
+  appropriate for that (no NSFW, no harassment, no hate, no politics wars).
+- No impersonation: don't present your plot as someone else's.
+
+### Technical guardrails
+- **No secrets**: no API keys, tokens, or credentials in any file — the repo
+  is public and history is forever.
+- **No tracking**: no analytics, fingerprinting, ad pixels, or third-party
+  data collection on your site.
+- **No heavy payloads**: your folder must stay under **5 MB** total, no
+  single file over 2 MB. Optimize images.
+- **Sandbox-aware**: your site runs in a sandboxed iframe with an opaque
+  origin — `window.parent`, cookies, `localStorage`, and same-origin
+  `fetch()` are unavailable. Keep pages self-contained; plain `<img>`,
+  `<link>`, and `<script src>` assets work fine.
+- No autoplaying audio, no crypto miners, no service workers, no obfuscated
+  or minified-beyond-review code.
+
+---
+
 ## 3. `config.json` schema
 
 Every field is optional except `name`; omitted fields fall back to defaults.
@@ -76,7 +123,7 @@ Colors are hex strings.
 
 ```jsonc
 {
-  "name": "Ada Lovelace",              // required — sign above the house
+  "name": "ada",                       // required — public handle on the sign
   "tagline": "first of the programmers",
   "site": "site/index.html",           // entry page, relative to your folder
 
@@ -142,7 +189,7 @@ silently skipped and their plot stays empty.
 4. Append `"<slug>"` to the array in `contributors/manifest.json` — last
    position, nothing else changed.
 5. Verify locally (§6).
-6. Commit with message `settle: <Name> claims a plot` and open a pull request
+6. Commit with message `settle: <handle> claims a plot` and open a pull request
    (or push, if the workshop uses direct pushes). Touch only the files above.
 
 Plots are assigned by manifest order automatically — there are 20; the engine

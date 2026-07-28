@@ -1,0 +1,12 @@
+# The engine, the laws, and the CI belong to the world owner.
+# Contributor PRs that touch these files require owner review.
+/index.html         @tomacco
+/src/               @tomacco
+/AGENTS.md          @tomacco
+/CLAUDE.md          @tomacco
+/README.md          @tomacco
+/docs/              @tomacco
+/scripts/           @tomacco
+/.github/           @tomacco
+/.nojekyll          @tomacco
+/contributors/manifest.json @tomacco

@@ -1,0 +1,23 @@
+name: validate contribution
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  laws-of-the-core-world:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Validate against AGENTS.md
+        run: node scripts/validate-contribution.mjs "origin/${{ github.base_ref }}"
+        env:
+          PR_ACTOR: ${{ github.actor }}
+          REPO_OWNER: ${{ github.repository_owner }}
