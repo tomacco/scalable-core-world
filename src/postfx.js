@@ -78,16 +78,18 @@ export function createPostFX(renderer, scene, camera) {
       const onScreen = sunNDC.z < 1
         && sunNDC.x > -1.4 && sunNDC.x < 1.4
         && sunNDC.y > -1.4 && sunNDC.y < 1.4;
+      let intensity = 0;
       if (onScreen) {
         godrays.uniforms.uSunPos.value.set((sunNDC.x + 1) / 2, (sunNDC.y + 1) / 2);
         // strongest at dawn/dusk, subtle at noon, off at night
         const edgeFade = 1.0 - Math.max(Math.abs(sunNDC.x), Math.abs(sunNDC.y)) / 1.4;
-        godrays.uniforms.uIntensity.value =
-          (0.25 + duskF * 0.9) * (1 - nightF) * Math.max(0, edgeFade) * 1.1;
+        intensity = (0.25 + duskF * 0.9) * (1 - nightF) * Math.max(0, edgeFade) * 1.1;
         godrays.uniforms.uTint.value.setRGB(1.0, 0.9 - duskF * 0.25, 0.65 - duskF * 0.25);
-      } else {
-        godrays.uniforms.uIntensity.value = 0;
       }
+      godrays.uniforms.uIntensity.value = intensity;
+      // a zero-strength pass would still stream every pixel through the
+      // shader — drop it from the chain outright when it can't contribute
+      godrays.enabled = intensity > 0.001;
       bloom.strength = 0.45 + nightF * 0.5 + duskF * 0.25;
     },
   };

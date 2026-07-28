@@ -3,8 +3,9 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { buildPlanet, plots, wildSpots, PLOT_COUNT } from './planet.js';
-import { buildEstate, buildWildDecor, makeLabel, makeBadge, GLOW_MATERIALS } from './structures.js';
+import { buildEstate, buildWildDecor, makeLabel, makeBadge, GLOW_MATERIALS, SOLID_MATERIAL } from './structures.js';
 import { createSky } from './sky.js';
 import { createPostFX } from './postfx.js';
 import { makeNoise } from './noise.js';
@@ -30,7 +31,10 @@ const prList = $('prList'), prCount = $('prCount'), prRefreshBtn = $('prRefreshB
 // -------------------------------------------------------- renderer
 
 const canvas = $('scene');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+// antialias off on purpose: every frame goes through the EffectComposer's
+// render targets, which have no MSAA, so a multisampled canvas would only
+// spend memory smoothing the final blit of an already-rasterized image
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
@@ -154,8 +158,10 @@ speedBtn.addEventListener('click', () => {
   speedBtn.textContent = SPEEDS[speedIdx] === 0 ? 'time ⏸' : `time ×${SPEEDS[speedIdx]}`;
 });
 
+const _sunDir = new THREE.Vector3(); // reused every frame — never allocate in the loop
+
 function sunDirFromAngle(a) {
-  return new THREE.Vector3(Math.cos(a), Math.sin(a) * 0.85, Math.sin(a) * 0.42).normalize();
+  return _sunDir.set(Math.cos(a), Math.sin(a) * 0.85, Math.sin(a) * 0.42).normalize();
 }
 
 // ------------------------------------------------------ build world
@@ -180,11 +186,7 @@ async function boot() {
   await new Promise((r) => setTimeout(r, 20));
 
   const spots = wildSpots();
-  for (const spot of spots) {
-    const decor = buildWildDecor(spot);
-    orientOnPlanet(decor.group, spot.dir, spot.radius + 0.4, rnd.hash(spot.seed, 5, 5) * Math.PI * 2, 0.85);
-    scene.add(decor.group);
-  }
+  scene.add(buildMergedWildDecor(spots));
 
   // butterflies gather where the wildflowers grow, spread around the globe
   const flowers = spots.filter((s) => s.kind === 'flower');
@@ -200,6 +202,31 @@ async function boot() {
   // deep link: index.html#visit=ivan-gonzalez flies straight to a house
   const visit = new URLSearchParams(location.hash.slice(1)).get('visit');
   if (visit && contributorsById.has(visit)) flyTo(visit);
+}
+
+// The wilds never move and never need picking, so all their little meshes
+// collapse into a single draw call: bake each decor's on-planet transform
+// into its geometry and merge the lot into one mesh with the shared material.
+function buildMergedWildDecor(spots) {
+  const up = new THREE.Vector3(0, 1, 0);
+  const q = new THREE.Quaternion(), yawQ = new THREE.Quaternion();
+  const pos = new THREE.Vector3(), scl = new THREE.Vector3();
+  const mat = new THREE.Matrix4();
+  const geos = [];
+  for (const spot of spots) {
+    const decor = buildWildDecor(spot);
+    q.setFromUnitVectors(up, spot.dir);
+    yawQ.setFromAxisAngle(up, rnd.hash(spot.seed, 5, 5) * Math.PI * 2);
+    q.multiply(yawQ); // same frame orientOnPlanet builds: surface normal, then local yaw
+    pos.copy(spot.dir).multiplyScalar(spot.radius + 0.4);
+    scl.setScalar(0.85);
+    mat.compose(pos, q, scl);
+    for (const mesh of decor.meshes) geos.push(mesh.geometry.applyMatrix4(mat));
+  }
+  const merged = new THREE.Mesh(mergeGeometries(geos), SOLID_MATERIAL);
+  merged.castShadow = true;
+  merged.receiveShadow = true;
+  return merged;
 }
 
 // Houses stay flagged NEW for this long after their merge/deploy.
@@ -294,13 +321,19 @@ async function addSettler(id, index, { announce = false } = {}) {
   label.position.copy(plot.dir).multiplyScalar(plot.radius + 1.3 + estate.roofY * 0.8 + 3.2);
   scene.add(label);
 
-  const record = { id, config, plot, group: estate.group, label, roofY: estate.roofY };
+  const record = { id, config, plot, group: estate.group, label, roofY: estate.roofY, meshes: estate.meshes };
   contributorsById.set(id, record);
   for (const mesh of estate.meshes) {
     mesh.userData.contributorId = id;
     clickables.push(mesh);
   }
   scene.add(estate.group);
+
+  // one generous bounding sphere per estate lets pick() skip the triangle
+  // test for every house the pointer ray doesn't even come near
+  const bounds = new THREE.Box3().setFromObject(estate.group);
+  record.pickSphere = bounds.getBoundingSphere(new THREE.Sphere());
+  record.pickSphere.radius += 1;
 
   const li = document.createElement('li');
   const btn = document.createElement('button');
@@ -607,8 +640,11 @@ function tangentFrame(dir) {
   return { e1, e2 };
 }
 
-function makeWingPair(w, h, color) {
-  const mat = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide });
+// one material per creature color, not per creature part
+const BUTTERFLY_BODY_MAT = new THREE.MeshBasicMaterial({ color: 0x26222b });
+const BIRD_MAT = new THREE.MeshBasicMaterial({ color: 0x2a2b33, side: THREE.DoubleSide });
+
+function makeWingPair(w, h, mat) {
   const geoL = new THREE.PlaneGeometry(w, h);
   geoL.rotateX(-Math.PI / 2);
   geoL.translate(w / 2, 0, 0);
@@ -621,11 +657,8 @@ function spawnButterfly(spot) {
   const s = spot.seed;
   const color = new THREE.Color().setHSL(rnd.hash(s, 21, 1), 0.8, 0.62);
   const group = new THREE.Group();
-  const wings = makeWingPair(0.55, 0.42, color);
-  const body = new THREE.Mesh(
-    new THREE.BoxGeometry(0.09, 0.09, 0.45),
-    new THREE.MeshBasicMaterial({ color: 0x26222b })
-  );
+  const wings = makeWingPair(0.55, 0.42, new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide }));
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.09, 0.45), BUTTERFLY_BODY_MAT);
   group.add(wings.left, wings.right, body);
   scene.add(group);
   butterflies.push({
@@ -644,11 +677,8 @@ function spawnBirds(count) {
     ).normalize();
     const { e1 } = tangentFrame(axis);
     const group = new THREE.Group();
-    const wings = makeWingPair(1.1, 0.38, 0x2a2b33);
-    const body = new THREE.Mesh(
-      new THREE.BoxGeometry(0.2, 0.2, 0.8),
-      new THREE.MeshBasicMaterial({ color: 0x2a2b33 })
-    );
+    const wings = makeWingPair(1.1, 0.38, BIRD_MAT);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.8), BIRD_MAT);
     group.add(wings.left, wings.right, body);
     scene.add(group);
     birds.push({
@@ -727,10 +757,20 @@ renderer.domElement.addEventListener('click', (e) => {
   }
 });
 
+const pickCandidates = [];
+const NO_HITS = [];
+
 function pick() {
   if (flying || clickables.length === 0) { hoveredId = null; return; }
   raycaster.setFromCamera(pointer, camera);
-  const hits = raycaster.intersectObjects(clickables, false);
+  // sphere gate: full triangle intersection only for estates the ray grazes
+  pickCandidates.length = 0;
+  for (const rec of contributorsById.values()) {
+    if (rec?.pickSphere && raycaster.ray.intersectsSphere(rec.pickSphere)) {
+      pickCandidates.push(...rec.meshes);
+    }
+  }
+  const hits = pickCandidates.length ? raycaster.intersectObjects(pickCandidates, false) : NO_HITS;
   const id = hits.length ? hits[0].object.userData.contributorId : null;
   if (id !== hoveredId) {
     hoveredId = id;
@@ -761,15 +801,17 @@ function flyCamera(endPos, endTarget, duration = 2000, onDone = null) {
 
   const t0 = controls.target.clone();
   const t1 = endTarget.clone();
+  const a = new THREE.Vector3(), b = new THREE.Vector3(); // scratch for the flight's frames
 
   tween = {
     start: performance.now(),
     duration,
     update(k) {
       const e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2; // easeInOutCubic
-      const a = p0.clone().lerp(p1, e), b = p1.clone().lerp(p2, e);
+      a.copy(p0).lerp(p1, e);
+      b.copy(p1).lerp(p2, e);
       camera.position.copy(a.lerp(b, e));
-      controls.target.copy(t0.clone().lerp(t1, e));
+      controls.target.copy(a.copy(t0).lerp(t1, e));
     },
     done() {
       flying = false;
@@ -912,9 +954,10 @@ function lightTheWorld(sunDir) {
 }
 
 // name labels fade out when you're close enough to read the front door
+// (skip the null placeholders addSettler parks while a config is in flight)
 function fadeLabelsUpClose() {
   for (const rec of contributorsById.values()) {
-    rec.label.visible = camera.position.distanceTo(rec.label.position) > 30;
+    if (rec) rec.label.visible = camera.position.distanceTo(rec.label.position) > 30;
   }
 }
 
@@ -943,7 +986,7 @@ function keepCameraAboveTerrain() {
 }
 
 function renderFrame(sunDir, nightF, duskF) {
-  postfx.update(sunDir.clone().multiplyScalar(640), duskF, nightF);
+  postfx.update(_v1.copy(sunDir).multiplyScalar(640), duskF, nightF);
   postfx.composer.render();
 }
 

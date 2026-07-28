@@ -7,9 +7,14 @@ import { makeNoise } from './noise.js';
 
 const rng = makeNoise(4711);
 
+// Every structure shares two materials — vertex colors carry all the
+// variety, so per-builder material instances would only add draw overhead.
+export const SOLID_MATERIAL = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 });
+
 // Materials whose brightness main.js modulates with the night factor
 // (windows and lamps come alive after sunset).
-export const GLOW_MATERIALS = [];
+const GLOW_MATERIAL = new THREE.MeshBasicMaterial({ vertexColors: true });
+export const GLOW_MATERIALS = [GLOW_MATERIAL];
 
 // ------------------------------------------------------------ builder
 
@@ -104,10 +109,7 @@ class VoxelBuilder {
 
     const solidGeo = this._emit(this.solid, this.cuboids.filter((c) => !c.glow));
     if (solidGeo) {
-      const mesh = new THREE.Mesh(
-        solidGeo,
-        new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 })
-      );
+      const mesh = new THREE.Mesh(solidGeo, SOLID_MATERIAL);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       group.add(mesh);
@@ -116,9 +118,7 @@ class VoxelBuilder {
 
     const glowGeo = this._emit(this.glow, this.cuboids.filter((c) => c.glow));
     if (glowGeo) {
-      const mat = new THREE.MeshBasicMaterial({ vertexColors: true });
-      GLOW_MATERIALS.push(mat);
-      const mesh = new THREE.Mesh(glowGeo, mat);
+      const mesh = new THREE.Mesh(glowGeo, GLOW_MATERIAL);
       group.add(mesh);
       meshes.push(mesh);
     }
