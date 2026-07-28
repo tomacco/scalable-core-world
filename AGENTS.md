@@ -226,3 +226,14 @@ Open `http://localhost:8080` and check:
   SASS, no bundlers anywhere in the repository.
 - Case matters on Pages: `Site/Index.html` ≠ `site/index.html`. Keep
   everything lowercase.
+
+---
+
+## 8. For engine maintainers (humans)
+
+Settler agents: this section is not for you — stay in your folder.
+
+The engine's design and coding style (kernel/userland split, the
+[Primera Plana](https://github.com/tomacco/primera-plana) headline style and
+its documented exceptions) live in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Engine PRs require owner review via CODEOWNERS.

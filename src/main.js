@@ -508,12 +508,25 @@ function formatSolTime(a) {
   return `${hh}:${mm}`;
 }
 
+// The frame loop, newspaper style: read the headline, descend only to debug.
 function animate() {
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.1);
   elapsed += dt;
 
-  // advance the sun
+  const sunDir = advanceSun(dt);
+  const { nightF, duskF } = lightTheWorld(sunDir);
+  fadeLabelsUpClose();
+  updateFauna(elapsed);
+  advanceFlight();
+  tuneControlFeel();
+  controls.update();
+  keepCameraAboveTerrain();
+  pick();
+  renderFrame(sunDir, nightF, duskF);
+}
+
+function advanceSun(dt) {
   if (phaseTarget !== null) {
     const diff = ((phaseTarget - sunAngle) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI;
     const step = Math.sign(diff) * Math.min(Math.abs(diff), dt * 2.2);
@@ -522,8 +535,11 @@ function animate() {
   } else {
     sunAngle += (Math.PI * 2 / DAY_LENGTH) * SPEEDS[speedIdx] * dt;
   }
+  clockTime.textContent = formatSolTime(sunAngle);
+  return sunDirFromAngle(sunAngle);
+}
 
-  const sunDir = sunDirFromAngle(sunAngle);
+function lightTheWorld(sunDir) {
   const { nightF, duskF } = sky.update(sunDir, elapsed, auroraBoost);
   const dayF = 1 - nightF;
 
@@ -534,39 +550,44 @@ function animate() {
   moonFill.position.copy(sunDir).multiplyScalar(-150);
   moonFill.intensity = nightF * 0.55;
 
-  const glowLevel = 0.5 + nightF * 0.75;
+  const glowLevel = 0.5 + nightF * 0.75; // windows and lamps wake at dusk
   for (const mat of GLOW_MATERIALS) mat.color.setScalar(glowLevel);
 
-  clockTime.textContent = formatSolTime(sunAngle);
+  return { nightF, duskF };
+}
 
-  updateFauna(elapsed);
-
-  // name labels fade out when you're close enough to read the front door
+// name labels fade out when you're close enough to read the front door
+function fadeLabelsUpClose() {
   for (const rec of contributorsById.values()) {
     rec.label.visible = camera.position.distanceTo(rec.label.position) > 30;
   }
+}
 
-  if (tween) {
-    const k = Math.min(1, (performance.now() - tween.start) / tween.duration);
-    tween.update(k);
-    if (k >= 1) { const t = tween; tween = null; t.done(); }
-  }
+function advanceFlight() {
+  if (!tween) return;
+  const k = Math.min(1, (performance.now() - tween.start) / tween.duration);
+  tween.update(k);
+  if (k >= 1) { const t = tween; tween = null; t.done(); }
+}
 
-  // gentle up close, brisk when spinning the globe from afar
+// gentle up close, brisk when spinning the globe from afar
+function tuneControlFeel() {
   const closeness = mode === 'globe'
     ? THREE.MathUtils.clamp((camera.position.length() - GLOBE_MIN) / 200, 0, 1)
     : THREE.MathUtils.clamp(camera.position.distanceTo(controls.target) / 90, 0, 1);
   controls.rotateSpeed = 0.15 + closeness * 0.85;
   controls.zoomSpeed = 0.55 + closeness * 0.65;
+}
 
-  controls.update();
-
-  // hard floor: never let the camera dive inside the planet (matters most
-  // while orbiting a house, where the pivot sits near the surface)
+// hard floor: never let the camera dive inside the planet (matters most
+// while orbiting a house, where the pivot sits near the surface)
+function keepCameraAboveTerrain() {
   if (!tween && camera.position.length() < SAFE_RADIUS) {
     camera.position.setLength(SAFE_RADIUS);
   }
-  pick();
+}
+
+function renderFrame(sunDir, nightF, duskF) {
   postfx.update(sunDir.clone().multiplyScalar(640), duskF, nightF);
   postfx.composer.render();
 }

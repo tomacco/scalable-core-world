@@ -67,7 +67,11 @@ the world `fetch()`es contributor data.)
 | Conductor | `src/main.js` | Loads settlers, camera flights, the door-to-website transition |
 
 Three.js is loaded from a CDN via import maps — the repository is served
-exactly as committed.
+exactly as committed. The kernel/userland design and the engine's coding
+style ([Primera Plana](https://github.com/tomacco/primera-plana)) are
+documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Contribution
+guardrails (no PII, folder isolation, size budgets) are enforced by CI on
+every pull request.
 
 ## For agents
 
