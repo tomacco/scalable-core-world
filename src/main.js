@@ -382,7 +382,7 @@ async function addSettler(id, index, { announce = false } = {}) {
   label.position.copy(plot.dir).multiplyScalar(plot.radius + 1.3 + estate.roofY * 0.8 + 3.2);
   scene.add(label);
 
-  const record = { id, config, plot, group: estate.group, label, roofY: estate.roofY, meshes: estate.meshes };
+  const record = { id, index, config, plot, group: estate.group, label, roofY: estate.roofY, meshes: estate.meshes };
   contributorsById.set(id, record);
   for (const mesh of estate.meshes) {
     mesh.userData.contributorId = id;
@@ -613,12 +613,75 @@ function renderPRError(msg) {
   prList.appendChild(li);
 }
 
+// The manifest is the truth; a live session converges on it. Settlers gone
+// from the manifest are dismantled, and survivors whose index shifted are
+// re-seated on their new plot — so a stale session ends up exactly where a
+// fresh reload would, and a newcomer can never land on an occupied plot.
+function syncDepartures(ids) {
+  const present = new Set(ids);
+  for (const id of [...contributorsById.keys()]) {
+    if (!present.has(id)) removeSettler(id);
+  }
+}
+
+async function reseatShiftedSettlers(ids) {
+  for (let i = 0; i < ids.length; i++) {
+    const rec = contributorsById.get(ids[i]);
+    if (rec && rec.index !== i) {
+      removeSettler(ids[i], { silent: true });
+      await addSettler(ids[i], i); // seen-store knows them: no NEW fanfare
+    }
+  }
+}
+
+function removeSettler(id, { silent = false } = {}) {
+  const rec = contributorsById.get(id);
+  contributorsById.delete(id);
+  if (!rec) return; // a reserved placeholder — nothing was built yet
+  if (focusedId === id) returnToGlobe();
+  scene.remove(rec.group);
+  scene.remove(rec.label);
+  rec.label.material.map.dispose();
+  rec.label.material.dispose();
+  // estate geometries are per-settler (materials are shared — keep those)
+  for (const mesh of rec.meshes) {
+    mesh.geometry.dispose();
+    const c = clickables.indexOf(mesh);
+    if (c >= 0) clickables.splice(c, 1);
+  }
+  for (let i = newBadges.length - 1; i >= 0; i--) {
+    if (newBadges[i].record === rec) {
+      scene.remove(newBadges[i].sprite);
+      newBadges[i].sprite.material.map.dispose();
+      newBadges[i].sprite.material.dispose();
+      newBadges.splice(i, 1);
+    }
+  }
+  rec.li.remove();
+  if (!silent) announceDeparture(rec.config.name || rec.id);
+}
+
+function announceDeparture(name) {
+  console.log(`👋 settler departed: ${name}`);
+  const el = document.createElement('div');
+  el.className = 'arrival-toast';
+  el.textContent = `◆ ${name} departed`;
+  toastLayer.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  setTimeout(() => {
+    el.classList.remove('show');
+    setTimeout(() => el.remove(), 600);
+  }, 7000);
+}
+
 async function runSettlerScan() {
   if (!pollInFlight) {
     pollInFlight = true;
     try {
       const manifest = await fetchJSON('contributors/manifest.json', { bust: true });
       const ids = manifest.contributors || [];
+      syncDepartures(ids);
+      await reseatShiftedSettlers(ids);
       for (let i = 0; i < ids.length; i++) {
         if (!contributorsById.has(ids[i])) await addSettler(ids[i], i, { announce: true });
       }
