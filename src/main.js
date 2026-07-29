@@ -56,24 +56,6 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.5, 2000);
 camera.position.set(36, 54, 132);
 
-// Two camera modes, both pan-free so the pivot is always meaningful:
-//   globe — pivot is the planet core: spin from afar, skim terrain up close
-//   house — pivot is a settler's house after clicking it; the "🌍 Planet
-//           view" button (or Esc) flies you back out to globe mode
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
-// Snappy enough that the world stops when your hand stops. Heavy damping
-// reads as "the camera has its own momentum" instead of "I am dragging this".
-controls.dampingFactor = 0.14;
-controls.enablePan = false;
-controls.target.set(0, 0, 0);
-controls.autoRotate = true;
-controls.autoRotateSpeed = 0.4;
-// Fixed, never touched per-frame: the same drag must always produce the same
-// rotation, whatever the zoom. Direct manipulation depends on that constancy.
-controls.rotateSpeed = 0.9;
-controls.zoomSpeed = 0.8;
-
 const GLOBE_MIN = 62, GLOBE_MAX = 360;
 const SAFE_RADIUS = 55; // hard floor: the camera never sinks into the terrain
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
@@ -83,37 +65,80 @@ const WORLD_UP = new THREE.Vector3(0, 1, 0);
 // a dome you slide on. Tying it to zoom made zooming silently tilt the view.
 const HOUSE_MIN_ELEVATION = THREE.MathUtils.degToRad(10);
 
-let mode = 'globe';
-function setMode(m) {
-  mode = m;
-  if (m === 'globe') {
-    controls.minDistance = GLOBE_MIN;
-    controls.maxDistance = GLOBE_MAX;
-    homeBtn.classList.remove('show');
-  } else {
-    controls.minDistance = 9;   // distances are measured from the house now
-    controls.maxDistance = 78;  // stay "about the house"; beyond this, go home
-    controls.autoRotate = false; // never drift while someone is visiting
-    homeBtn.classList.add('show');
-  }
-  hintGlobe.hidden = m !== 'globe';
-  hintHouse.hidden = m === 'globe';
-}
-setMode('globe');
-
+// Two camera modes, both pan-free so the pivot is always meaningful:
+//   globe — pivot is the planet core: spin from afar, skim terrain up close
+//   house — pivot is a settler's house after clicking it; the "🌍 Planet
+//           view" button (or Esc) flies you back out to globe mode
+//
+// OrbitControls bakes its orbit axis from camera.up ONCE, at construction —
+// assigning camera.up afterwards rolls the picture but never re-aims the
+// orbit or the polar clamp. So the dome each mode slides on is only aligned
+// (globe: world axis, house: the plot's surface normal) if the controls are
+// REBUILT at the moment the up-axis changes; setOrbitUp is that moment.
+let controls = null;
 let idleTimer = null;
-controls.addEventListener('start', () => {
+
+function onOrbitStart() {
   controls.autoRotate = false;
   clearTimeout(idleTimer);
   hideCard();
-});
-controls.addEventListener('end', () => {
+}
+
+function onOrbitEnd() {
   clearTimeout(idleTimer);
   // only the globe idles into a slow spin — a house you are visiting stays put
   idleTimer = setTimeout(() => {
     if (mode === 'globe' && !viewer.classList.contains('open')) controls.autoRotate = true;
   }, 30000);
-});
+}
+
+function setOrbitUp(up) {
+  const target = controls ? controls.target.clone() : new THREE.Vector3();
+  if (controls) controls.dispose();
+  camera.up.copy(up).normalize();
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  // Snappy enough that the world stops when your hand stops. Heavy damping
+  // reads as "the camera has its own momentum" instead of "I am dragging this".
+  controls.dampingFactor = 0.14;
+  controls.enablePan = false;
+  controls.target.copy(target);
+  controls.autoRotate = false;
+  controls.autoRotateSpeed = 0.4;
+  // Fixed, never touched per-frame: the same drag must always produce the same
+  // rotation, whatever the zoom. Direct manipulation depends on that constancy.
+  controls.rotateSpeed = 0.9;
+  controls.zoomSpeed = 0.8;
+  controls.addEventListener('start', onOrbitStart);
+  controls.addEventListener('end', onOrbitEnd);
+  applyModeDistances();
+  controls.update();
+}
+
+let mode = 'globe';
+
+function applyModeDistances() {
+  if (mode === 'globe') {
+    controls.minDistance = GLOBE_MIN;
+    controls.maxDistance = GLOBE_MAX;
+  } else {
+    controls.minDistance = 9;   // distances are measured from the house now
+    controls.maxDistance = 78;  // stay "about the house"; beyond this, go home
+    controls.autoRotate = false; // never drift while someone is visiting
+  }
+}
+
+function setMode(m) {
+  mode = m;
+  applyModeDistances();
+  homeBtn.classList.toggle('show', m !== 'globe');
+  hintGlobe.hidden = m !== 'globe';
+  hintHouse.hidden = m === 'globe';
+}
+
+setOrbitUp(WORLD_UP);
+setMode('globe');
+controls.autoRotate = true; // the freshly-loaded globe drifts until touched
 
 // ---------------------------------------------------------- lights
 
@@ -864,8 +889,8 @@ function flyCamera(endPos, endTarget, duration = 2000, onDone = null, endUp = nu
     },
     done() {
       flying = false;
-      controls.enabled = true;
-      if (u1) camera.up.copy(u1);
+      if (u1) setOrbitUp(u1); // fresh controls: the orbit axis must re-aim too
+      else controls.enabled = true;
       if (onDone) onDone();
     },
   };
@@ -932,8 +957,7 @@ function flyToHouse(rec, onDone) {
     },
     done() {
       flying = false;
-      controls.enabled = true;
-      camera.up.copy(N);
+      setOrbitUp(N); // the dome's pole is now the plot's surface normal
       if (onDone) onDone();
     },
   };
