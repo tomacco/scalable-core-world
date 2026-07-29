@@ -6,6 +6,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { buildPlanet, plots, wildSpots, PLOT_COUNT } from './planet.js';
 import { buildEstate, buildWildDecor, makeLabel, makeBadge, GLOW_MATERIALS, SOLID_MATERIAL } from './structures.js';
+import { buildEnergyGrid, energyClear } from './energy.js';
 import { createSky } from './sky.js';
 import { createPostFX } from './postfx.js';
 import { makeNoise } from './noise.js';
@@ -50,7 +51,7 @@ let fps = 0; // smoothed, for the dev panel
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.5, 2000);
-camera.position.set(30, 45, 110);
+camera.position.set(36, 54, 132);
 
 // Two camera modes, both pan-free so the pivot is always meaningful:
 //   globe — pivot is the planet core: spin from afar, skim terrain up close
@@ -64,8 +65,8 @@ controls.target.set(0, 0, 0);
 controls.autoRotate = true;
 controls.autoRotateSpeed = 0.4;
 
-const GLOBE_MIN = 52, GLOBE_MAX = 340;
-const SAFE_RADIUS = 46; // hard floor: the camera never sinks into the terrain
+const GLOBE_MIN = 62, GLOBE_MAX = 360;
+const SAFE_RADIUS = 55; // hard floor: the camera never sinks into the terrain
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 
 // In house mode the orbit's up-axis is the house's surface normal, so a
@@ -106,12 +107,12 @@ controls.addEventListener('end', () => {
 const sunLight = new THREE.DirectionalLight(0xffffff, 2.4);
 sunLight.castShadow = true;
 sunLight.shadow.mapSize.set(2048, 2048);
-sunLight.shadow.camera.left = -75;
-sunLight.shadow.camera.right = 75;
-sunLight.shadow.camera.top = 75;
-sunLight.shadow.camera.bottom = -75;
+sunLight.shadow.camera.left = -90;
+sunLight.shadow.camera.right = 90;
+sunLight.shadow.camera.top = 90;
+sunLight.shadow.camera.bottom = -90;
 sunLight.shadow.camera.near = 40;
-sunLight.shadow.camera.far = 320;
+sunLight.shadow.camera.far = 340;
 sunLight.shadow.bias = -0.0006;
 scene.add(sunLight);
 scene.add(sunLight.target);
@@ -138,9 +139,9 @@ const PHASE_ANGLES = { dawn: 0.02, noon: Math.PI / 2, dusk: Math.PI - 0.06, nigh
 
 // camera vantages that frame each sky event (sun rim for god rays, pole for aurora)
 const VANTAGES = {
-  dawn: [-125, 25, 75],
-  dusk: [125, 25, 75],
-  aurora: [40, 20, 190],
+  dawn: [-150, 30, 90],
+  dusk: [150, 30, 90],
+  aurora: [48, 24, 228],
 };
 
 // deep link: index.html#phase=dusk (dawn|noon|dusk|night|aurora)
@@ -182,6 +183,7 @@ function sunDirFromAngle(a) {
 
 const clickables = [];
 const contributorsById = new Map();
+let energy = null; // the power layer; built in boot(), animated every frame
 
 function orientOnPlanet(group, dir, radius, yaw = 0, scale = 1) {
   group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
@@ -199,8 +201,15 @@ async function boot() {
   loadMsg.textContent = 'growing the wilds…';
   await new Promise((r) => setTimeout(r, 20));
 
-  const spots = wildSpots();
+  // the machines were surveyed first — the wilds keep out of their footprints
+  const spots = wildSpots().filter((s) => energyClear(s.dir));
   scene.add(buildMergedWildDecor(spots));
+
+  loadMsg.textContent = 'raising the wind farm…';
+  await new Promise((r) => setTimeout(r, 20));
+
+  energy = buildEnergyGrid();
+  scene.add(energy.group);
 
   // butterflies gather where the wildflowers grow, spread around the globe
   const flowers = spots.filter((s) => s.kind === 'flower');
@@ -705,7 +714,7 @@ function spawnBirds(count) {
     scene.add(group);
     birds.push({
       group, wings, axis, base: e1,
-      radius: 56 + rnd.hash(i, 34, 4) * 14,
+      radius: 66 + rnd.hash(i, 34, 4) * 16,
       speed: (0.05 + rnd.hash(i, 35, 5) * 0.05) * (rnd.hash(i, 36, 6) > 0.5 ? 1 : -1),
       phase: rnd.hash(i, 37, 7) * Math.PI * 2,
     });
@@ -919,7 +928,7 @@ function returnToGlobe() {
   hideCard();
   focusedId = null;
   setMode('globe');
-  const out = camera.position.clone().normalize().multiplyScalar(130);
+  const out = camera.position.clone().normalize().multiplyScalar(155);
   flyCamera(out, new THREE.Vector3(0, 0, 0), 1800, null, WORLD_UP);
 }
 
@@ -986,6 +995,7 @@ function animate() {
 
   const sunDir = advanceSun(dt);
   const { nightF, duskF } = lightTheWorld(sunDir);
+  if (energy) energy.update(dt, elapsed, nightF);
   fadeLabelsUpClose();
   updateSpawnAnimations();
   updateNewBadges(elapsed);
@@ -1016,7 +1026,7 @@ function lightTheWorld(sunDir) {
   const { nightF, duskF } = sky.update(sunDir, elapsed, auroraBoost);
   const dayF = 1 - nightF;
 
-  sunLight.position.copy(sunDir).multiplyScalar(150);
+  sunLight.position.copy(sunDir).multiplyScalar(170);
   sunLight.intensity = 0.1 + dayF * 2.6;
   sunLight.color.setRGB(1, 1 - duskF * 0.38, 1 - duskF * 0.62);
   hemi.intensity = 0.18 + dayF * 0.55;
