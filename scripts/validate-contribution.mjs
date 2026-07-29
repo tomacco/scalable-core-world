@@ -27,6 +27,7 @@ function main() {
   const slugs = touchedSlugs(changed);
   checkSingleSettlement(slugs);
   checkManifestAppendOnly(changed);
+  checkPlotCollisions(changed);
   for (const slug of slugs) {
     checkConfig(slug);
     checkSizeBudget(slug);
@@ -94,6 +95,35 @@ function checkManifestAppendOnly(changed) {
   for (const slug of added) {
     if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug)) errors.push(`manifest: slug "${slug}" is not kebab-case`);
     if (!existsSync(join('contributors', slug, 'config.json'))) errors.push(`manifest: slug "${slug}" has no contributors/${slug}/config.json`);
+  }
+}
+
+// Two settlers must never share a plot. Plots are assigned by manifest
+// index, so the two ways to collide are a duplicated slug and an overflow
+// past the world's plot count (the engine wraps index % PLOT_COUNT, which
+// would stack a newcomer's house on the founder's lawn).
+function checkPlotCollisions(changed) {
+  if (!changed.includes('contributors/manifest.json')) return;
+  let list;
+  try {
+    list = JSON.parse(readFileSync('contributors/manifest.json', 'utf8')).contributors || [];
+  } catch {
+    return; // unparseable manifest is already reported elsewhere
+  }
+  const dupes = [...new Set(list.filter((s, i) => list.indexOf(s) !== i))];
+  if (dupes.length) errors.push(`manifest: duplicate slug(s) ${dupes.join(', ')} — a settler can hold only one plot`);
+  const plotCount = readPlotCount();
+  if (plotCount != null && list.length > plotCount) {
+    errors.push(`manifest: ${list.length} settlers but the world has ${plotCount} plots — the engine would wrap and stack two houses on one plot`);
+  }
+}
+
+function readPlotCount() {
+  try {
+    const m = readFileSync('src/planet.js', 'utf8').match(/PLOT_COUNT\s*=\s*(\d+)/);
+    return m ? parseInt(m[1], 10) : null;
+  } catch {
+    return null;
   }
 }
 

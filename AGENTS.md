@@ -229,8 +229,9 @@ silently skipped and their plot stays empty.
 6. Commit with message `settle: <handle> claims a plot` and open a pull request
    (or push, if the workshop uses direct pushes). Touch only the files above.
 
-Plots are assigned by manifest order automatically — there are 24; the engine
-wraps around if the world ever overflows.
+Plots are assigned by manifest order automatically — there are 24, and CI
+refuses a settlement once the world is full (no two settlers ever share a
+plot).
 
 ---
 
