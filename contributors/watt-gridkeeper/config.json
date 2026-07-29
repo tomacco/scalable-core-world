@@ -1,0 +1,33 @@
+{
+  "name": "Watt the Gridkeeper",
+  "tagline": "keeps the electrons flowing",
+  "site": "site/index.html",
+  "avatar": {
+    "size": "medium",
+    "skin": "#c98d5a",
+    "eyes": "#26262e",
+    "hair": { "style": "curly", "color": "#1f1a14" },
+    "beard": false,
+    "glasses": true,
+    "glassesColor": "#2b3a67",
+    "outfit": { "type": "pants", "top": "#f28c28", "bottom": "#2b3a67", "shoes": "#26211c" },
+    "hat": { "style": "cap", "color": "#f2c811" }
+  },
+  "house": {
+    "size": "medium",
+    "wall": "#e8e2d0",
+    "roof": "#2e6b8a",
+    "door": "#5b3a1e",
+    "trim": "#f4efe4",
+    "windowsLit": true
+  },
+  "garden": {
+    "platform": "cozy",
+    "trees": 1,
+    "flowers": ["#f2c811", "#7ec8e3"],
+    "fence": true,
+    "lamp": true,
+    "path": true,
+    "extras": ["flag", "telescope"]
+  }
+}
