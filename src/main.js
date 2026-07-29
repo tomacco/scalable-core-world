@@ -66,6 +66,14 @@ controls.autoRotateSpeed = 0.4;
 
 const GLOBE_MIN = 52, GLOBE_MAX = 340;
 const SAFE_RADIUS = 46; // hard floor: the camera never sinks into the terrain
+const WORLD_UP = new THREE.Vector3(0, 1, 0);
+
+// In house mode the orbit's up-axis is the house's surface normal, so a
+// minimum polar-angle clamp keeps the camera above the local ground. The
+// closer you zoom, the lower that floor drops — so up close you can circle the
+// house almost at eye level, while pulling back lifts to a gentler overview.
+const HOUSE_ELEV_MIN = THREE.MathUtils.degToRad(7);
+const HOUSE_ELEV_MAX = THREE.MathUtils.degToRad(46);
 
 let mode = 'globe';
 function setMode(m) {
@@ -154,7 +162,7 @@ document.querySelectorAll('.skybtn[data-phase]').forEach((btn) => {
       hideCard();
       focusedId = null;
       setMode('globe');
-      flyCamera(new THREE.Vector3(...v), new THREE.Vector3(0, 0, 0), 2000);
+      flyCamera(new THREE.Vector3(...v), new THREE.Vector3(0, 0, 0), 2000, null, WORLD_UP);
     }
   });
 });
@@ -802,7 +810,7 @@ function pick() {
 
 let tween = null;
 
-function flyCamera(endPos, endTarget, duration = 2000, onDone = null) {
+function flyCamera(endPos, endTarget, duration = 2000, onDone = null, endUp = null) {
   controls.autoRotate = false;
   controls.enabled = false;
   flying = true;
@@ -815,6 +823,8 @@ function flyCamera(endPos, endTarget, duration = 2000, onDone = null) {
 
   const t0 = controls.target.clone();
   const t1 = endTarget.clone();
+  const u0 = camera.up.clone();
+  const u1 = endUp ? endUp.clone().normalize() : null; // reorient the up-axis en route
   const a = new THREE.Vector3(), b = new THREE.Vector3(); // scratch for the flight's frames
 
   tween = {
@@ -826,10 +836,12 @@ function flyCamera(endPos, endTarget, duration = 2000, onDone = null) {
       b.copy(p1).lerp(p2, e);
       camera.position.copy(a.lerp(b, e));
       controls.target.copy(a.copy(t0).lerp(t1, e));
+      if (u1) camera.up.copy(a.copy(u0).lerp(u1, e).normalize());
     },
     done() {
       flying = false;
       controls.enabled = true;
+      if (u1) camera.up.copy(u1);
       if (onDone) onDone();
     },
   };
@@ -852,7 +864,8 @@ function flyTo(id) {
   const endPos = normal.clone().multiplyScalar(rec.plot.radius + 17)
     .add(side.multiplyScalar(25));
 
-  flyCamera(endPos, housePos, 2400, () => showCard(rec));
+  // orbit around the house with its surface normal as up (see HOUSE_ELEV_*)
+  flyCamera(endPos, housePos, 2400, () => showCard(rec), normal);
 }
 
 function returnToGlobe() {
@@ -860,7 +873,7 @@ function returnToGlobe() {
   focusedId = null;
   setMode('globe');
   const out = camera.position.clone().normalize().multiplyScalar(130);
-  flyCamera(out, new THREE.Vector3(0, 0, 0), 1800);
+  flyCamera(out, new THREE.Vector3(0, 0, 0), 1800, null, WORLD_UP);
 }
 
 homeBtn.addEventListener('click', returnToGlobe);
@@ -932,6 +945,7 @@ function animate() {
   updateFauna(elapsed);
   advanceFlight();
   tuneControlFeel();
+  clampHouseElevation();
   controls.update();
   keepCameraAboveTerrain();
   pick();
@@ -992,9 +1006,24 @@ function tuneControlFeel() {
   controls.zoomSpeed = 0.55 + closeness * 0.65;
 }
 
-// hard floor: never let the camera dive inside the planet (matters most
-// while orbiting a house, where the pivot sits near the surface)
+// Keep the camera above the house's local ground. With the orbit up-axis set
+// to the surface normal, polar angle is measured from that normal, so a
+// maxPolarAngle just under 90° is exactly "min elevation above the horizon".
+// The floor eases lower the closer you are, for a natural walk-around feel.
+function clampHouseElevation() {
+  if (mode !== 'house' || flying) { controls.maxPolarAngle = Math.PI; return; }
+  const dist = camera.position.distanceTo(controls.target);
+  const t = THREE.MathUtils.clamp(
+    (dist - controls.minDistance) / (controls.maxDistance - controls.minDistance), 0, 1);
+  const elevation = HOUSE_ELEV_MIN + (HOUSE_ELEV_MAX - HOUSE_ELEV_MIN) * t;
+  controls.maxPolarAngle = Math.PI / 2 - elevation;
+}
+
+// Hard floor for globe mode: never let the camera dive inside the planet. In
+// house mode the elevation clamp already keeps us above the local ground, and
+// this world-radius floor would fight getting close, so it's globe-only.
 function keepCameraAboveTerrain() {
+  if (mode !== 'globe') return;
   if (!tween && camera.position.length() < SAFE_RADIUS) {
     camera.position.setLength(SAFE_RADIUS);
   }
