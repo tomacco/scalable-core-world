@@ -149,8 +149,18 @@
     transition: color .2s, border-color .2s;
   }
   #scanNowBtn:hover, #prRefreshBtn:hover { color: var(--gold); border-color: var(--gold-soft); }
-  .dev-stat { padding: 0 14px 12px; color: var(--ink-dim); letter-spacing: 0.06em; }
+  .dev-stat { padding: 0 14px 10px; color: var(--ink-dim); letter-spacing: 0.06em; }
   .dev-stat span { color: var(--ink); }
+  .dev-stats {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 1px;
+    margin: 0 14px 12px; background: var(--hairline); border: 1px solid var(--hairline);
+  }
+  .dev-stats > div {
+    background: rgba(6,7,15,0.5); padding: 8px 10px;
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .dev-stats span { font-family: var(--display); font-weight: 500; font-size: 16px; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1; }
+  .dev-stats small { font-size: 8px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-dim); }
   .dev-prs-head {
     display: flex; justify-content: space-between; align-items: center;
     padding: 10px 14px; border-top: 1px solid var(--hairline);
@@ -334,6 +344,12 @@
       <button id="scanNowBtn">scan now</button>
     </div>
     <div class="dev-stat"><span id="settlerCount">0</span> settlers live on the planet</div>
+    <div class="dev-stats">
+      <div><span id="statFps">—</span><small>fps</small></div>
+      <div><span id="statCalls">—</span><small>draw calls</small></div>
+      <div><span id="statTris">—</span><small>triangles</small></div>
+      <div><span id="statGeo">—</span><small>geometries</small></div>
+    </div>
     <div class="dev-prs-head">
       <span>Pending PRs <b id="prCount">(…)</b></span>
       <button id="prRefreshBtn" title="Refresh">⟳</button>

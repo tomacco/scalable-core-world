@@ -27,6 +27,7 @@ const toastLayer = $('toastLayer');
 const devToggle = $('devToggle'), devpanel = $('devpanel'), devClose = $('devClose');
 const scanCountdown = $('scanCountdown'), scanNowBtn = $('scanNowBtn'), settlerCount = $('settlerCount');
 const prList = $('prList'), prCount = $('prCount'), prRefreshBtn = $('prRefreshBtn'), prFoot = $('prFoot');
+const statFps = $('statFps'), statCalls = $('statCalls'), statTris = $('statTris'), statGeo = $('statGeo');
 
 // -------------------------------------------------------- renderer
 
@@ -41,6 +42,11 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.15;
+// Manual reset so renderer.info sums every EffectComposer pass into one
+// per-frame total (autoReset would zero it on each pass's render call).
+renderer.info.autoReset = false;
+
+let fps = 0; // smoothed, for the dev panel
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.5, 2000);
@@ -466,12 +472,20 @@ function countLiveSettlers() {
   return n;
 }
 
-// One tick drives the countdown, the settler count, and lazy PR auto-refresh.
+// One tick drives the countdown, settler count, render stats, and PR refresh.
 setInterval(() => {
   if (!devOpen) return;
   const secs = Math.max(0, Math.ceil((nextScanAt - Date.now()) / 1000));
   scanCountdown.textContent = pollInFlight ? 'scanning…' : `${secs}s`;
   settlerCount.textContent = countLiveSettlers();
+
+  const info = renderer.info;
+  statFps.textContent = Math.round(fps);
+  statFps.style.color = fps >= 50 ? '#7fd18a' : fps >= 30 ? 'var(--gold)' : '#e07a5f';
+  statCalls.textContent = info.render.calls;
+  statTris.textContent = info.render.triangles.toLocaleString();
+  statGeo.textContent = info.memory.geometries;
+
   if (Date.now() - lastPRFetch > PR_THROTTLE_MS) refreshPRs();
 }, 500);
 
@@ -908,6 +922,7 @@ function animate() {
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.1);
   elapsed += dt;
+  if (dt > 0) fps += (1 / dt - fps) * 0.1; // exponential smoothing
 
   const sunDir = advanceSun(dt);
   const { nightF, duskF } = lightTheWorld(sunDir);
@@ -986,6 +1001,7 @@ function keepCameraAboveTerrain() {
 }
 
 function renderFrame(sunDir, nightF, duskF) {
+  renderer.info.reset(); // start a fresh per-frame tally before the pass chain
   postfx.update(_v1.copy(sunDir).multiplyScalar(640), duskF, nightF);
   postfx.composer.render();
 }
