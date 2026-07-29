@@ -75,7 +75,17 @@ function checkManifestAppendOnly(changed) {
   }
   const after = JSON.parse(readFileSync('contributors/manifest.json', 'utf8'));
   const a = before.contributors || [], b = after.contributors || [];
-  if (b.length < a.length) return errors.push('manifest: contributors were removed');
+  if (b.length < a.length) {
+    // Settlers never remove anyone — but the owner may retire a settler
+    // (test accounts, departures), as long as the survivors keep their
+    // relative order so the plot shuffle is the predictable index shift.
+    const removed = a.filter((s) => !b.includes(s));
+    if (actorIsOwner && isSubsequence(b, a)) {
+      warnings.push(`manifest: owner retired settler(s): ${removed.join(', ')} — later plots shift down by index`);
+      return;
+    }
+    return errors.push('manifest: contributors were removed');
+  }
   for (let i = 0; i < a.length; i++) {
     if (a[i] !== b[i]) return errors.push(`manifest: existing order changed at index ${i} ("${a[i]}" → "${b[i]}") — plots are assigned by index; append only`);
   }
@@ -225,6 +235,13 @@ function checkSiteContent(files) {
 }
 
 // ------------------------------------------------------------- leaves
+
+// true when every element of sub appears in full, in the same order
+function isSubsequence(sub, full) {
+  let i = 0;
+  for (const s of full) if (i < sub.length && sub[i] === s) i++;
+  return i === sub.length;
+}
 
 function changedFiles() {
   const out = execSync(`git diff --name-only --diff-filter=ACMR ${baseRef}...HEAD`, { encoding: 'utf8' });
