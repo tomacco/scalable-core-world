@@ -634,6 +634,10 @@ async function runSettlerScan() {
 function announceArrival(record) {
   console.log(`🏠 new settler: ${record.config.name || record.id}`);
   playArrivalChime();
+  // a new arrival is the planet's headline: fly there so the visitor watches
+  // the house grow in — unless they are inside someone's website, where a
+  // camera hijack would be rude (the toast still offers the jump)
+  if (!viewer.classList.contains('open')) flyTo(record.id);
   const el = document.createElement('div');
   el.className = 'arrival-toast';
   el.textContent = `◆ ${record.config.name || record.id} just settled`;
