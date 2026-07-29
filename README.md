@@ -31,6 +31,10 @@ raises the homestead in a single pull request.
 - The wilds are alive: forests, bushes, wildflowers, mushrooms, rocks — plus
   sheep, rabbits, foxes, chickens, butterflies over the flowers, and birds
   riding great circles around the planet.
+- The planet is powered: a **wind farm** spins on a hilltop mesa, an offshore
+  string rises from the sea on yellow monopiles, and pylons carry sagging
+  cables from a fenced substation toward the settlements. After dark the
+  turbines blink their red aviation beacons in sync.
 - Deep links: `#phase=dusk` (or `dawn`/`noon`/`night`/`aurora`) and
   `#visit=ivan-gonzalez` jump straight to a sky event or a settler's house.
 
@@ -52,7 +56,7 @@ contributors/
     └── site/index.html    ← your website, behind your front door
 ```
 
-Plots are assigned automatically in order of arrival. There are 20.
+Plots are assigned automatically in order of arrival. There are 24.
 
 ## Run locally
 
@@ -69,8 +73,9 @@ the world `fetch()`es contributor data.)
 
 | Piece | Where | What |
 |---|---|---|
-| Planet | `src/planet.js` | Seeded-noise voxel sphere: oceans, beaches, snow caps, 20 flattened plots |
+| Planet | `src/planet.js` | Seeded-noise voxel sphere: oceans, beaches, snow caps, 24 flattened plots |
 | Structures | `src/structures.js` | Config-driven houses, gardens, and avatars from merged voxel geometry |
+| Energy | `src/energy.js` | The power layer: wind farm, offshore turbines, substation, pylon lines |
 | Sky | `src/sky.js` | Atmosphere dome, day/night cycle, stars, moon, shader-driven aurora |
 | Light | `src/postfx.js` | Bloom + screen-space god rays at dawn and dusk |
 | Conductor | `src/main.js` | Loads settlers, camera flights, the door-to-website transition |

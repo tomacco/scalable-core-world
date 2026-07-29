@@ -18,7 +18,7 @@ export const GLOW_MATERIALS = [GLOW_MATERIAL];
 
 // ------------------------------------------------------------ builder
 
-class VoxelBuilder {
+export class VoxelBuilder {
   constructor(scale = 1) {
     this.scale = scale;
     this.solid = new Map();   // "x,y,z" -> THREE.Color

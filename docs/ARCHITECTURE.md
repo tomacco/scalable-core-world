@@ -52,14 +52,15 @@ add its guardrail in the same PR.
 No build step, no framework, no state library. Three.js from a CDN via import
 maps; ES modules straight to the browser. Every module owns one concern and
 they compose in `main.js` only — modules never import each other sideways
-except through `noise.js` (a shared leaf) and `planet.js` (the terrain
-authority).
+except through `noise.js` (a shared leaf), `planet.js` (the terrain
+authority), and `structures.js`'s `VoxelBuilder` (the shared voxel mesher).
 
 | Module | Owns | Depends on |
 |---|---|---|
 | `noise.js` | deterministic seeded noise | — |
 | `planet.js` | terrain field, voxelization, plots, wild spots | noise |
 | `structures.js` | houses, gardens, avatars, animals, labels | noise |
+| `energy.js` | wind turbines, substation, pylons & cables | noise, planet, structures |
 | `sky.js` | atmosphere, stars, sun/moon, aurora | noise |
 | `postfx.js` | bloom, god rays | three/addons |
 | `main.js` | composition: scene, camera modes, settlers, UI, the frame loop | all of the above |

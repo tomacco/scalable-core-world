@@ -4,13 +4,13 @@
 import * as THREE from 'three';
 import { makeNoise } from './noise.js';
 
-export const PLANET_RADIUS = 38;
-export const SEA_LEVEL = 38.0;
-export const PLOT_COUNT = 16;
+export const PLANET_RADIUS = 46;
+export const SEA_LEVEL = 46.0;
+export const PLOT_COUNT = 24;
 
 const AMP = 5.2;              // terrain amplitude in voxels
-const PLOT_INNER = 0.30;      // radians: fully flat plot cap (generous estates)
-const PLOT_OUTER = 0.44;      // radians: blend back into wild terrain
+export const PLOT_INNER = 0.20; // radians: fully flat plot cap (estate + lawn)
+const PLOT_OUTER = 0.30;      // radians: blend back into wild terrain
 
 const noise = makeNoise(20260728);
 
@@ -18,7 +18,7 @@ const noise = makeNoise(20260728);
 
 function fibonacciPlots() {
   const candidates = [];
-  const n = 90;
+  const n = 300; // dense candidate field: 24 strided picks land ≥ 0.58 rad apart
   const golden = Math.PI * (3 - Math.sqrt(5));
   for (let i = 0; i < n; i++) {
     const y = 1 - (2 * (i + 0.5)) / n;
@@ -27,7 +27,7 @@ function fibonacciPlots() {
     candidates.push(new THREE.Vector3(Math.cos(a) * r, y, Math.sin(a) * r));
   }
   // keep a temperate band — poles stay wild (snow + aurora country)
-  const band = candidates.filter((v) => Math.abs(v.y) < 0.6);
+  const band = candidates.filter((v) => Math.abs(v.y) < 0.72);
   const plots = [];
   for (let i = 0; i < PLOT_COUNT; i++) {
     const idx = Math.floor((i * band.length) / PLOT_COUNT);
@@ -301,7 +301,7 @@ function pickKind(t) {
 export function wildSpots() {
   const spots = [];
   const golden = Math.PI * (3 - Math.sqrt(5));
-  const n = 1400;
+  const n = 2050; // scaled with surface area so the wilds stay as dense as before
   const v = new THREE.Vector3();
   for (let i = 0; i < n; i++) {
     const y = 1 - (2 * (i + 0.5)) / n;
