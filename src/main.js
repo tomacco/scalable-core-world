@@ -28,6 +28,7 @@ const devToggle = $('devToggle'), devpanel = $('devpanel'), devClose = $('devClo
 const scanCountdown = $('scanCountdown'), scanNowBtn = $('scanNowBtn'), settlerCount = $('settlerCount');
 const prList = $('prList'), prCount = $('prCount'), prRefreshBtn = $('prRefreshBtn'), prFoot = $('prFoot');
 const statFps = $('statFps'), statCalls = $('statCalls'), statTris = $('statTris'), statGeo = $('statGeo');
+const statRes = $('statRes'), perfWarning = $('perfWarning');
 
 // -------------------------------------------------------- renderer
 
@@ -36,7 +37,8 @@ const canvas = $('scene');
 // render targets, which have no MSAA, so a multisampled canvas would only
 // spend memory smoothing the final blit of an already-rasterized image
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+const MAX_PR = Math.min(window.devicePixelRatio, 2); // native ceiling for adaptive res
+renderer.setPixelRatio(MAX_PR);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -493,6 +495,8 @@ setInterval(() => {
   statCalls.textContent = info.render.calls;
   statTris.textContent = info.render.triangles.toLocaleString();
   statGeo.textContent = info.memory.geometries;
+  statRes.textContent = `${Math.round(renderScale * 100)}%`;
+  statRes.style.color = renderScale > 0.99 ? 'var(--ink)' : renderScale > MIN_SCALE + 1e-3 ? 'var(--gold)' : '#e07a5f';
 
   if (Date.now() - lastPRFetch > PR_THROTTLE_MS) refreshPRs();
 }, 500);
@@ -1085,9 +1089,57 @@ function renderFrame(sunDir, nightF, duskF) {
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
+  applyResolution();
+});
+
+// ------------------------------------------------ adaptive resolution
+
+// The GPU cost scales with pixel count, so on a big/high-DPI viewport we render
+// the scene into a smaller internal buffer and let the browser upscale it,
+// trading sharpness for frame rate. renderScale rides down when FPS is below
+// target and eases back up when there's headroom; if it bottoms out and frames
+// are still slow, we surface a warning.
+const TARGET_FPS = 50;
+const MIN_SCALE = 0.5;              // half-res per axis = quarter the pixels
+let renderScale = 1;
+
+function applyResolution() {
+  const pr = MAX_PR * renderScale;
+  renderer.setPixelRatio(pr);
+  postfx.setPixelRatio(pr);
   renderer.setSize(window.innerWidth, window.innerHeight);
   postfx.setSize(window.innerWidth, window.innerHeight);
-});
+}
+
+let adaptStartedAt = 0;
+let lowPinnedSince = 0;
+setInterval(() => {
+  if (document.hidden) return;
+  if (!adaptStartedAt) { adaptStartedAt = Date.now(); return; }
+  if (Date.now() - adaptStartedAt < 2000 || fps <= 0) return; // let FPS settle
+
+  if (fps < TARGET_FPS - 4 && renderScale > MIN_SCALE) {
+    renderScale = Math.max(MIN_SCALE, renderScale - 0.12);
+    applyResolution();
+  } else if (fps > TARGET_FPS + 10 && renderScale < 1) {
+    renderScale = Math.min(1, renderScale + 0.06);
+    applyResolution();
+  }
+
+  // warn only once the buffer is at the floor and it still can't keep up
+  const pinnedLow = renderScale <= MIN_SCALE + 1e-3 && fps < TARGET_FPS - 6;
+  if (pinnedLow) {
+    if (!lowPinnedSince) lowPinnedSince = Date.now();
+    setPerfWarning(Date.now() - lowPinnedSince > 4000);
+  } else {
+    lowPinnedSince = 0;
+    setPerfWarning(false);
+  }
+}, 1000);
+
+function setPerfWarning(on) {
+  perfWarning.classList.toggle('show', on);
+}
 
 boot().catch((err) => console.error('boot failed:', err));
 animate();
