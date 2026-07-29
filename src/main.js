@@ -859,9 +859,21 @@ function pick() {
 
 let tween = null;
 
+// Every flight frame still runs controls.update() (it owns the lookAt), and
+// update() clamps the camera-target distance to the mode limits on every
+// call. Mid-flight the target is in motion, so those clamps would teleport
+// the camera whenever the path passes closer or farther than the limits
+// allow. The tween owns the path: suspend the clamps for the duration and
+// let the arrival (setOrbitUp / applyModeDistances) restore them.
+function suspendDistanceLimits() {
+  controls.minDistance = 0;
+  controls.maxDistance = Infinity;
+}
+
 function flyCamera(endPos, endTarget, duration = 2000, onDone = null, endUp = null) {
   controls.autoRotate = false;
   controls.enabled = false;
+  suspendDistanceLimits();
   flying = true;
 
   const p0 = camera.position.clone();
@@ -890,7 +902,7 @@ function flyCamera(endPos, endTarget, duration = 2000, onDone = null, endUp = nu
     done() {
       flying = false;
       if (u1) setOrbitUp(u1); // fresh controls: the orbit axis must re-aim too
-      else controls.enabled = true;
+      else { controls.enabled = true; applyModeDistances(); }
       if (onDone) onDone();
     },
   };
@@ -917,6 +929,7 @@ const FLIGHT_ELEV_FLOOR = THREE.MathUtils.degToRad(5);
 function flyToHouse(rec, onDone) {
   controls.autoRotate = false;
   controls.enabled = false;
+  suspendDistanceLimits();
   flying = true;
 
   const N = rec.plot.dir.clone();                    // local up (surface normal)
@@ -932,8 +945,9 @@ function flyToHouse(rec, onDone) {
     .addScaledVector(t2, Math.cos(el) * Math.sin(az))
     .addScaledVector(N, Math.sin(el));
 
+  // exact start pose — any snapping to a "nicer" start would be a visible jump
   const startVec = camera.position.clone().sub(center);
-  const dStart = Math.max(startVec.length(), DOME_DIST);
+  const dStart = startVec.length();
   const sDir = startVec.clone().normalize();
   const azStart = Math.atan2(sDir.dot(t2), sDir.dot(t1));
   const elStart = Math.asin(THREE.MathUtils.clamp(sDir.dot(N), -1, 1));
@@ -948,7 +962,9 @@ function flyToHouse(rec, onDone) {
     update(k) {
       const e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
       const dist = THREE.MathUtils.lerp(dStart, DOME_DIST, e);
-      const el = Math.max(THREE.MathUtils.lerp(elStart, DOME_ELEV, e), FLIGHT_ELEV_FLOOR);
+      // the floor fades in so a start below it eases up instead of snapping
+      const el = Math.max(THREE.MathUtils.lerp(elStart, DOME_ELEV, e),
+        FLIGHT_ELEV_FLOOR * Math.min(1, e * 4));
       dir.copy(dirFrom(azStart, el));                 // azimuth held → straight dome descent
       pos.copy(center).addScaledVector(dir, dist);
       camera.position.copy(pos);
