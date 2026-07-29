@@ -164,6 +164,20 @@
   }
   .dev-stats span { font-family: var(--display); font-weight: 500; font-size: 16px; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1; }
   .dev-stats small { font-size: 8px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-dim); }
+  .dev-res { padding: 0 14px 12px; color: var(--ink-dim); letter-spacing: 0.06em; font-size: 10px; }
+  .dev-res b { font-variant-numeric: tabular-nums; }
+  .dev-res-note { opacity: 0.6; }
+
+  /* ---------- low-performance warning ---------- */
+  #perfWarning {
+    position: fixed; z-index: 45; top: 20px; left: 50%; transform: translate(-50%, -20px);
+    max-width: 620px; text-align: center;
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.06em; line-height: 1.6;
+    color: #ffe4d0; background: rgba(120, 40, 24, 0.82); border: 1px solid rgba(224,122,95,.6);
+    padding: 12px 22px; backdrop-filter: blur(8px);
+    opacity: 0; pointer-events: none; transition: opacity .5s, transform .5s;
+  }
+  #perfWarning.show { opacity: 1; transform: translate(-50%, 0); }
   .dev-prs-head {
     display: flex; justify-content: space-between; align-items: center;
     padding: 10px 14px; border-top: 1px solid var(--hairline);
@@ -326,6 +340,8 @@
 
   <div id="toastLayer"></div>
 
+  <div id="perfWarning">⚠ This device can't keep a smooth frame rate even at the lowest resolution — try a smaller window or a more powerful machine.</div>
+
   <button id="devToggle" title="Host panel (D)">⚙ Dev</button>
   <div class="hud" id="devpanel" hidden>
     <div class="dev-head">
@@ -354,6 +370,7 @@
       <div><span id="statTris">—</span><small>triangles</small></div>
       <div><span id="statGeo">—</span><small>geometries</small></div>
     </div>
+    <div class="dev-res">internal resolution <b><span id="statRes">100%</span></b> <span class="dev-res-note">(auto-scaled to hold ~50 fps)</span></div>
     <div class="dev-prs-head">
       <span>Pending PRs <b id="prCount">(…)</b></span>
       <button id="prRefreshBtn" title="Refresh">⟳</button>

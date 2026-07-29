@@ -73,6 +73,7 @@ export function createPostFX(renderer, scene, camera) {
   return {
     composer,
     setSize(w, h) { composer.setSize(w, h); },
+    setPixelRatio(pr) { composer.setPixelRatio(pr); }, // for adaptive resolution
     update(sunWorldPos, duskF, nightF) {
       sunNDC.copy(sunWorldPos).project(camera);
       const onScreen = sunNDC.z < 1
