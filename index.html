@@ -140,7 +140,10 @@
   }
   .dev-head button { background: none; border: none; color: var(--ink-dim); cursor: pointer; font-size: 12px; }
   .dev-head button:hover { color: var(--ink); }
-  .dev-scan { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; }
+  .dev-sky { padding: 12px 14px; border-bottom: 1px solid var(--hairline); }
+  .dev-sky-label { font-size: 9px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--ink-dim); margin-bottom: 8px; }
+  .dev-sky-row { display: flex; flex-wrap: wrap; gap: 5px; }
+  .dev-scan { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--hairline); }
   .dev-timer { letter-spacing: 0.08em; color: var(--ink-dim); }
   .dev-timer b { color: var(--gold); font-variant-numeric: tabular-nums; }
   #scanNowBtn, #prRefreshBtn {
@@ -308,16 +311,6 @@
 
   <div class="hud" id="skyconsole">
     <div id="clockface">SOL <b id="clocktime">—</b></div>
-    <div class="btnrow">
-      <button class="skybtn" data-phase="dawn">Dawn</button>
-      <button class="skybtn" data-phase="noon">Noon</button>
-      <button class="skybtn" data-phase="dusk">Dusk</button>
-      <button class="skybtn" data-phase="night">Night</button>
-      <button class="skybtn" data-phase="aurora">✦ Aurora</button>
-    </div>
-    <div class="btnrow">
-      <button class="skybtn" id="speedBtn">time ×1</button>
-    </div>
   </div>
 
   <div class="hud" id="roster">
@@ -338,6 +331,17 @@
     <div class="dev-head">
       <span>Host · Settler Feed</span>
       <button id="devClose" title="Close (D)">✕</button>
+    </div>
+    <div class="dev-sky">
+      <div class="dev-sky-label">Sky</div>
+      <div class="dev-sky-row">
+        <button class="skybtn" data-phase="dawn">Dawn</button>
+        <button class="skybtn" data-phase="noon">Noon</button>
+        <button class="skybtn" data-phase="dusk">Dusk</button>
+        <button class="skybtn" data-phase="night">Night</button>
+        <button class="skybtn" data-phase="aurora">✦ Aurora</button>
+        <button class="skybtn" id="speedBtn">time ×1</button>
+      </div>
     </div>
     <div class="dev-scan">
       <div class="dev-timer">next scan <b><span id="scanCountdown">—</span></b></div>
