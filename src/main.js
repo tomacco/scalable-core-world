@@ -498,6 +498,52 @@ function scanForSettlersNow() { scheduleScan(0); }
 const GH_REPO = detectRepo();
 const PR_THROTTLE_MS = 75000; // unauthenticated API allows 60 req/h — stay well under
 
+// ---------------------------------------------------- builders ranking
+// The leaderboard's store is GitHub itself: the public contributors API
+// counts commits per handle, and with squash merges one merged PR is one
+// contribution. Persistent across deploys, no server to run. Logins are
+// untrusted strings — textContent only, same rule as the roster.
+
+const rankTitle = $('rankTitle'), rankList = $('rankList');
+const RANK_REFRESH_MS = 5 * 60 * 1000;
+const RANK_MEDALS = ['🥇', '🥈', '🥉'];
+
+async function refreshRanking() {
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${GH_REPO}/contributors?per_page=12`,
+      { headers: { Accept: 'application/vnd.github+json' }, cache: 'no-store' }
+    );
+    if (!res.ok) return; // rate-limited or offline — keep the last table
+    renderRanking(await res.json());
+  } catch { /* offline — keep the last table */ }
+}
+
+function renderRanking(rows) {
+  if (!Array.isArray(rows)) return;
+  const humans = rows.filter((r) => r?.type === 'User' && !String(r.login).endsWith('[bot]'));
+  if (!humans.length) return;
+  rankList.replaceChildren();
+  humans.slice(0, 8).forEach((r, i) => {
+    const li = document.createElement('li');
+    const medal = document.createElement('span');
+    medal.className = 'rk-medal';
+    medal.textContent = RANK_MEDALS[i] || `${i + 1}.`;
+    const name = document.createElement('span');
+    name.textContent = r.login; // textContent: untrusted
+    const count = document.createElement('span');
+    count.className = 'rk-count';
+    count.textContent = `${r.contributions}`;
+    li.append(medal, name, count);
+    rankList.appendChild(li);
+  });
+  rankTitle.hidden = false;
+  rankList.hidden = false;
+}
+
+refreshRanking();
+setInterval(refreshRanking, RANK_REFRESH_MS);
+
 function detectRepo() {
   const host = location.hostname;
   const seg = location.pathname.split('/').filter(Boolean);
