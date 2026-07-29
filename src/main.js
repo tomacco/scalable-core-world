@@ -29,6 +29,7 @@ const scanCountdown = $('scanCountdown'), scanNowBtn = $('scanNowBtn'), settlerC
 const prList = $('prList'), prCount = $('prCount'), prRefreshBtn = $('prRefreshBtn'), prFoot = $('prFoot');
 const statFps = $('statFps'), statCalls = $('statCalls'), statTris = $('statTris'), statGeo = $('statGeo');
 const statRes = $('statRes'), perfWarning = $('perfWarning');
+const hintGlobe = $('hintGlobe'), hintHouse = $('hintHouse');
 
 // -------------------------------------------------------- renderer
 
@@ -60,22 +61,26 @@ camera.position.set(30, 45, 110);
 //           view" button (or Esc) flies you back out to globe mode
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
-controls.dampingFactor = 0.06;
+// Snappy enough that the world stops when your hand stops. Heavy damping
+// reads as "the camera has its own momentum" instead of "I am dragging this".
+controls.dampingFactor = 0.14;
 controls.enablePan = false;
 controls.target.set(0, 0, 0);
 controls.autoRotate = true;
 controls.autoRotateSpeed = 0.4;
+// Fixed, never touched per-frame: the same drag must always produce the same
+// rotation, whatever the zoom. Direct manipulation depends on that constancy.
+controls.rotateSpeed = 0.9;
+controls.zoomSpeed = 0.8;
 
 const GLOBE_MIN = 52, GLOBE_MAX = 340;
 const SAFE_RADIUS = 46; // hard floor: the camera never sinks into the terrain
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 
-// In house mode the orbit's up-axis is the house's surface normal, so a
-// minimum polar-angle clamp keeps the camera above the local ground. The
-// closer you zoom, the lower that floor drops — so up close you can circle the
-// house almost at eye level, while pulling back lifts to a gentler overview.
-const HOUSE_ELEV_MIN = THREE.MathUtils.degToRad(7);
-const HOUSE_ELEV_MAX = THREE.MathUtils.degToRad(46);
+// In house mode the orbit's up-axis is the house's surface normal, so a polar
+// clamp is exactly "stay this far above the local horizon". It is a CONSTANT:
+// a dome you slide on. Tying it to zoom made zooming silently tilt the view.
+const HOUSE_MIN_ELEVATION = THREE.MathUtils.degToRad(10);
 
 let mode = 'globe';
 function setMode(m) {
@@ -86,9 +91,12 @@ function setMode(m) {
     homeBtn.classList.remove('show');
   } else {
     controls.minDistance = 9;   // distances are measured from the house now
-    controls.maxDistance = 130;
+    controls.maxDistance = 78;  // stay "about the house"; beyond this, go home
+    controls.autoRotate = false; // never drift while someone is visiting
     homeBtn.classList.add('show');
   }
+  hintGlobe.hidden = m !== 'globe';
+  hintHouse.hidden = m === 'globe';
 }
 setMode('globe');
 
@@ -100,7 +108,10 @@ controls.addEventListener('start', () => {
 });
 controls.addEventListener('end', () => {
   clearTimeout(idleTimer);
-  idleTimer = setTimeout(() => { if (!viewer.classList.contains('open')) controls.autoRotate = true; }, 30000);
+  // only the globe idles into a slow spin — a house you are visiting stays put
+  idleTimer = setTimeout(() => {
+    if (mode === 'globe' && !viewer.classList.contains('open')) controls.autoRotate = true;
+  }, 30000);
 });
 
 // ---------------------------------------------------------- lights
@@ -995,8 +1006,7 @@ function animate() {
   updateNewBadges(elapsed);
   updateFauna(elapsed);
   advanceFlight();
-  tuneControlFeel();
-  clampHouseElevation();
+  applyOrbitLimits();
   controls.update();
   keepCameraAboveTerrain();
   pick();
@@ -1048,26 +1058,14 @@ function advanceFlight() {
   if (k >= 1) { const t = tween; tween = null; t.done(); }
 }
 
-// gentle up close, brisk when spinning the globe from afar
-function tuneControlFeel() {
-  const closeness = mode === 'globe'
-    ? THREE.MathUtils.clamp((camera.position.length() - GLOBE_MIN) / 200, 0, 1)
-    : THREE.MathUtils.clamp(camera.position.distanceTo(controls.target) / 90, 0, 1);
-  controls.rotateSpeed = 0.15 + closeness * 0.85;
-  controls.zoomSpeed = 0.55 + closeness * 0.65;
-}
-
-// Keep the camera above the house's local ground. With the orbit up-axis set
-// to the surface normal, polar angle is measured from that normal, so a
-// maxPolarAngle just under 90° is exactly "min elevation above the horizon".
-// The floor eases lower the closer you are, for a natural walk-around feel.
-function clampHouseElevation() {
-  if (mode !== 'house' || flying) { controls.maxPolarAngle = Math.PI; return; }
-  const dist = camera.position.distanceTo(controls.target);
-  const t = THREE.MathUtils.clamp(
-    (dist - controls.minDistance) / (controls.maxDistance - controls.minDistance), 0, 1);
-  const elevation = HOUSE_ELEV_MIN + (HOUSE_ELEV_MAX - HOUSE_ELEV_MIN) * t;
-  controls.maxPolarAngle = Math.PI / 2 - elevation;
+// The one owner of the orbit's vertical limit. Visiting a house you slide on a
+// fixed dome that stops a constant angle above the local ground; the planet is
+// unconstrained; a flight in progress is left alone so the descent can steer
+// itself. Constant by design — a zoom-dependent limit silently tilted the view.
+function applyOrbitLimits() {
+  controls.maxPolarAngle = (mode === 'house' && !flying)
+    ? Math.PI / 2 - HOUSE_MIN_ELEVATION
+    : Math.PI;
 }
 
 // Hard floor for globe mode: never let the camera dive inside the planet. In
