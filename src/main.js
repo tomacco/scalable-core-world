@@ -852,20 +852,67 @@ function flyTo(id) {
   if (!rec) return;
   hideCard();
   focusedId = id;
-  setMode('house'); // widen distance limits before the flight starts
+  setMode('house'); // widen distance limits before the descent starts
+  flyToHouse(rec, () => showCard(rec));
+}
 
-  const normal = rec.plot.dir.clone();
-  const housePos = normal.clone().multiplyScalar(rec.plot.radius + 3.5);
+// Descend onto a dome around the house: interpolate the camera in the house's
+// own spherical frame — azimuth held (so it comes straight down from where you
+// clicked), distance eased in, elevation eased to the arrival angle and never
+// below a floor. The camera slides down the dome instead of bulging out into
+// space or grazing the planet the way a world-space arc did.
+const DOME_DIST = 28;                                // arrival distance from the house
+const DOME_ELEV = THREE.MathUtils.degToRad(27);      // arrival elevation above ground
+const FLIGHT_ELEV_FLOOR = THREE.MathUtils.degToRad(5);
 
-  // stand back from the house, biased toward where the camera already is
-  let side = camera.position.clone().normalize().projectOnPlane(normal);
-  if (side.lengthSq() < 0.01) side = new THREE.Vector3(0, 1, 0).projectOnPlane(normal);
-  side.normalize();
-  const endPos = normal.clone().multiplyScalar(rec.plot.radius + 17)
-    .add(side.multiplyScalar(25));
+function flyToHouse(rec, onDone) {
+  controls.autoRotate = false;
+  controls.enabled = false;
+  flying = true;
 
-  // orbit around the house with its surface normal as up (see HOUSE_ELEV_*)
-  flyCamera(endPos, housePos, 2400, () => showCard(rec), normal);
+  const N = rec.plot.dir.clone();                    // local up (surface normal)
+  const center = N.clone().multiplyScalar(rec.plot.radius + 3.5);
+
+  // stable tangent basis at the house, for measuring azimuth around the dome
+  let t1 = new THREE.Vector3(0, 1, 0).cross(N);
+  if (t1.lengthSq() < 1e-4) t1 = new THREE.Vector3(1, 0, 0).cross(N);
+  t1.normalize();
+  const t2 = N.clone().cross(t1).normalize();
+
+  const dirFrom = (az, el) => t1.clone().multiplyScalar(Math.cos(el) * Math.cos(az))
+    .addScaledVector(t2, Math.cos(el) * Math.sin(az))
+    .addScaledVector(N, Math.sin(el));
+
+  const startVec = camera.position.clone().sub(center);
+  const dStart = Math.max(startVec.length(), DOME_DIST);
+  const sDir = startVec.clone().normalize();
+  const azStart = Math.atan2(sDir.dot(t2), sDir.dot(t1));
+  const elStart = Math.asin(THREE.MathUtils.clamp(sDir.dot(N), -1, 1));
+
+  const t0 = controls.target.clone();
+  const u0 = camera.up.clone();
+  const dir = new THREE.Vector3(), pos = new THREE.Vector3();
+
+  tween = {
+    start: performance.now(),
+    duration: 2200,
+    update(k) {
+      const e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+      const dist = THREE.MathUtils.lerp(dStart, DOME_DIST, e);
+      const el = Math.max(THREE.MathUtils.lerp(elStart, DOME_ELEV, e), FLIGHT_ELEV_FLOOR);
+      dir.copy(dirFrom(azStart, el));                 // azimuth held → straight dome descent
+      pos.copy(center).addScaledVector(dir, dist);
+      camera.position.copy(pos);
+      controls.target.copy(t0).lerp(center, e);
+      camera.up.copy(u0).lerp(N, e).normalize();
+    },
+    done() {
+      flying = false;
+      controls.enabled = true;
+      camera.up.copy(N);
+      if (onDone) onDone();
+    },
+  };
 }
 
 function returnToGlobe() {
