@@ -189,7 +189,10 @@
   .qrow b { text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; font-weight: 400; }
   .qrow input[type=range] { width: 100%; height: 12px; accent-color: var(--gold); cursor: pointer; margin: 0; }
   /* under auto the sliders are a readout, not a control — they still move */
-  .qrow input[type=range]:disabled { cursor: default; opacity: 0.75; accent-color: var(--ink-dim); }
+  /* pointer-events too: `disabled` alone leaves the thumb draggable if anything
+     re-enables the control, and a slider that moves without the engine moving
+     is worse than one that cannot move at all */
+  .qrow input[type=range]:disabled { cursor: default; opacity: 0.75; accent-color: var(--ink-dim); pointer-events: none; }
 
   /* ---------- low-performance warning ---------- */
   #perfWarning {

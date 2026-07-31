@@ -342,6 +342,7 @@ export function createQuality(targets) {
     reapplyFauna() { setFaunaDensity(knobs.fauna); },
 
     isAuto: () => auto,
+    current: () => ({ ...applied }),   // what the engine is actually running
     isExhausted: () => tier >= LAST_TIER,
   };
 }
