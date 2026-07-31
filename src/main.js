@@ -1305,6 +1305,15 @@ function buildQualityControls() {
     slider.step = '1';
     slider.disabled = true;              // auto is on at boot
     slider.addEventListener('input', () => {
+      // Under auto the engine owns this value. `disabled` should already have
+      // stopped the drag, but if anything lets it through — a stylesheet, an
+      // extension, a synthesised event — the thumb would sit somewhere the
+      // engine is not, and the panel would be lying. Snap it back instead of
+      // trusting one line of defence.
+      if (quality.isAuto()) {
+        slider.value = String(knobIndex(name, quality.current()[name]));
+        return;
+      }
       quality.setKnob(name, knob.values[Number(slider.value)]);
     });
 
@@ -1320,6 +1329,9 @@ function buildQualityControls() {
 function renderQualityPanel(knobs, tier, name, auto) {
   qTier.textContent = tier;
   qTierName.textContent = name;
+  // Browsers restore checkbox state across a reload, which would leave the box
+  // claiming one thing while the engine does another. The engine wins.
+  qAuto.checked = auto;
   for (const knobName of KNOB_NAMES) {
     const knob = KNOBS[knobName];
     const v = knobs[knobName];
