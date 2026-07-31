@@ -9,6 +9,7 @@ import { buildEstate, buildWildDecor, makeLabel, makeBadge, GLOW_MATERIALS, SOLI
 import { buildEnergyGrid, energyClear } from './energy.js';
 import { createSky } from './sky.js';
 import { createPostFX } from './postfx.js';
+import { createQuality, KNOBS, KNOB_NAMES, knobIndex, TARGET_FPS } from './quality.js';
 import { makeNoise } from './noise.js';
 
 const rnd = makeNoise(31337);
@@ -29,7 +30,9 @@ const devToggle = $('devToggle'), devpanel = $('devpanel'), devClose = $('devClo
 const scanCountdown = $('scanCountdown'), scanNowBtn = $('scanNowBtn'), settlerCount = $('settlerCount');
 const prList = $('prList'), prCount = $('prCount'), prRefreshBtn = $('prRefreshBtn'), prFoot = $('prFoot');
 const statFps = $('statFps'), statCalls = $('statCalls'), statTris = $('statTris'), statGeo = $('statGeo');
-const statRes = $('statRes'), perfWarning = $('perfWarning');
+const perfWarning = $('perfWarning');
+const qAuto = $('qAuto'), qTier = $('qTier'), qTierName = $('qTierName');
+const qSliders = {}, qValues = {}; // filled by buildQualityControls, keyed by knob name
 const hintGlobe = $('hintGlobe'), hintHouse = $('hintHouse');
 
 // -------------------------------------------------------- renderer
@@ -42,8 +45,8 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
 const MAX_PR = Math.min(window.devicePixelRatio, 2); // native ceiling for adaptive res
 renderer.setPixelRatio(MAX_PR);
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+// shadowMap.enabled/type, the pixel ratio, and the shadow refresh cadence are
+// all owned by quality.js from here on — see the adaptive quality section
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.15;
 // Manual reset so renderer.info sums every EffectComposer pass into one
@@ -163,6 +166,7 @@ scene.add(moonFill);
 
 const sky = createSky(scene);
 const postfx = createPostFX(renderer, scene, camera);
+// the adaptive quality governor is created near its dev-panel wiring, below
 
 // ------------------------------------------------------- day cycle
 
@@ -254,6 +258,7 @@ async function boot() {
   const stride = Math.max(1, Math.ceil(flowers.length / 12));
   for (let i = 0; i < flowers.length; i += stride) spawnButterfly(flowers[i]);
   spawnBirds(6);
+  quality.reapplyFauna(); // the flocks only exist now, so push the density again
 
   loadMsg.textContent = 'welcoming the settlers…';
   await loadContributors();
@@ -586,8 +591,6 @@ setInterval(() => {
   statCalls.textContent = info.render.calls;
   statTris.textContent = info.render.triangles.toLocaleString();
   statGeo.textContent = info.memory.geometries;
-  statRes.textContent = `${Math.round(renderScale * 100)}%`;
-  statRes.style.color = renderScale > 0.99 ? 'var(--ink)' : renderScale > MIN_SCALE + 1e-3 ? 'var(--gold)' : '#e07a5f';
 
   if (Date.now() - lastPRFetch > PR_THROTTLE_MS) refreshPRs();
 }, 500);
@@ -816,6 +819,24 @@ function playArrivalChime() {
 const butterflies = [];
 const birds = [];
 
+// Thinning the fauna keeps a prefix of each flock alive rather than respawning
+// a smaller one: the survivors keep their seeded colours and orbits, so the
+// world stays recognisably itself as the density rides up and down.
+let faunaDensity = 1;
+const faunaLive = { butterflies: 0, birds: 0 };
+
+function setFaunaDensity(d) {
+  faunaDensity = d;
+  faunaLive.butterflies = thinFlock(butterflies, d);
+  faunaLive.birds = thinFlock(birds, d);
+}
+
+function thinFlock(flock, d) {
+  const keep = Math.round(flock.length * d);
+  for (let i = 0; i < flock.length; i++) flock[i].group.visible = i < keep;
+  return keep;
+}
+
 function tangentFrame(dir) {
   let e1 = new THREE.Vector3(0, 1, 0).cross(dir);
   if (e1.lengthSq() < 0.01) e1 = new THREE.Vector3(1, 0, 0).cross(dir);
@@ -878,8 +899,10 @@ const _q = new THREE.Quaternion();
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 
+// only the visible prefix is animated — a hidden butterfly costs nothing
 function updateFauna(t) {
-  for (const b of butterflies) {
+  for (let i = 0; i < faunaLive.butterflies; i++) {
+    const b = butterflies[i];
     const wander = t * 0.55 * b.drift + b.phase;
     _v1.copy(b.frame.e1).multiplyScalar(Math.cos(wander) * 1.4)
       .addScaledVector(b.frame.e2, Math.sin(wander) * 1.4);
@@ -891,7 +914,8 @@ function updateFauna(t) {
     b.wings.right.rotation.z = -flap;
   }
 
-  for (const b of birds) {
+  for (let i = 0; i < faunaLive.birds; i++) {
+    const b = birds[i];
     const a = t * b.speed + b.phase;
     _q.setFromAxisAngle(b.axis, a);
     _v1.copy(b.base).applyQuaternion(_q).multiplyScalar(b.radius);
@@ -1243,6 +1267,7 @@ function keepCameraAboveTerrain() {
 
 function renderFrame(sunDir, nightF, duskF) {
   renderer.info.reset(); // start a fresh per-frame tally before the pass chain
+  quality.beginFrame(SPEEDS[speedIdx]); // decides whether shadows redraw this frame
   postfx.update(_v1.copy(sunDir).multiplyScalar(640), duskF, nightF);
   postfx.composer.render();
 }
@@ -1250,50 +1275,86 @@ function renderFrame(sunDir, nightF, duskF) {
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
-  applyResolution();
+  quality.handleResize();
 });
 
-// ------------------------------------------------ adaptive resolution
+// -------------------------------------------------- quality controls
 
-// The GPU cost scales with pixel count, so on a big/high-DPI viewport we render
-// the scene into a smaller internal buffer and let the browser upscale it,
-// trading sharpness for frame rate. renderScale rides down when FPS is below
-// target and eases back up when there's headroom; if it bottoms out and frames
-// are still slow, we surface a warning.
-const TARGET_FPS = 50;
-const MIN_SCALE = 0.5;              // half-res per axis = quarter the pixels
-let renderScale = 1;
+// The dev panel's sliders are built from quality.js's own vocabulary rather
+// than spelled out in the markup, so a knob can never drift out of sync with
+// the values the ladder is allowed to choose. Each slider is an index into its
+// knob's legal values — under auto the engine drives them, under manual they
+// drive the engine.
 
-function applyResolution() {
-  const pr = MAX_PR * renderScale;
-  renderer.setPixelRatio(pr);
-  postfx.setPixelRatio(pr);
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  postfx.setSize(window.innerWidth, window.innerHeight);
+function buildQualityControls() {
+  const host = $('qKnobs');
+  for (const name of KNOB_NAMES) {
+    const knob = KNOBS[name];
+    const row = document.createElement('div');
+    row.className = 'qrow';
+
+    const label = document.createElement('label');
+    label.textContent = knob.label;
+    label.htmlFor = `q_${name}`;
+
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.id = `q_${name}`;
+    slider.min = '0';
+    slider.max = String(knob.values.length - 1);
+    slider.step = '1';
+    slider.disabled = true;              // auto is on at boot
+    slider.addEventListener('input', () => {
+      quality.setKnob(name, knob.values[Number(slider.value)]);
+    });
+
+    const value = document.createElement('b');
+
+    row.append(label, slider, value);
+    host.append(row);
+    qSliders[name] = slider;
+    qValues[name] = value;
+  }
 }
 
-let adaptStartedAt = 0;
-let lowPinnedSince = 0;
+function renderQualityPanel(knobs, tier, name, auto) {
+  qTier.textContent = tier;
+  qTierName.textContent = name;
+  for (const knobName of KNOB_NAMES) {
+    const knob = KNOBS[knobName];
+    const v = knobs[knobName];
+    qSliders[knobName].value = String(knobIndex(knobName, v));
+    qSliders[knobName].disabled = auto;
+    qValues[knobName].textContent = knob.format(v);
+  }
+}
+
+qAuto.addEventListener('change', () => quality.setAuto(qAuto.checked));
+
+// Frame rate is the only input; everything the picture can afford falls out of
+// it. Built here, after the panel and the fauna it drives, and before boot()
+// runs — so the opening tier is applied before the first frame is drawn.
+buildQualityControls();
+const quality = createQuality({
+  renderer, scene, sunLight, postfx,
+  maxPixelRatio: MAX_PR,
+  setFaunaDensity,
+  getFps: () => fps,
+  onChange: renderQualityPanel,
+});
+
+// Warn only once the ladder has nothing left to give and frames are still
+// short — and never while the knobs are being driven by hand, since a slow
+// frame rate is then the operator's own doing.
+let exhaustedSince = 0;
 setInterval(() => {
   if (document.hidden) return;
-  if (!adaptStartedAt) { adaptStartedAt = Date.now(); return; }
-  if (Date.now() - adaptStartedAt < 2000 || fps <= 0) return; // let FPS settle
-
-  if (fps < TARGET_FPS - 4 && renderScale > MIN_SCALE) {
-    renderScale = Math.max(MIN_SCALE, renderScale - 0.12);
-    applyResolution();
-  } else if (fps > TARGET_FPS + 10 && renderScale < 1) {
-    renderScale = Math.min(1, renderScale + 0.06);
-    applyResolution();
-  }
-
-  // warn only once the buffer is at the floor and it still can't keep up
-  const pinnedLow = renderScale <= MIN_SCALE + 1e-3 && fps < TARGET_FPS - 6;
-  if (pinnedLow) {
-    if (!lowPinnedSince) lowPinnedSince = Date.now();
-    setPerfWarning(Date.now() - lowPinnedSince > 4000);
+  const stuck = quality.isAuto() && quality.isExhausted() && fps > 0 && fps < TARGET_FPS - 6;
+  if (stuck) {
+    if (!exhaustedSince) exhaustedSince = Date.now();
+    setPerfWarning(Date.now() - exhaustedSince > 4000);
   } else {
-    lowPinnedSince = 0;
+    exhaustedSince = 0;
     setPerfWarning(false);
   }
 }, 1000);

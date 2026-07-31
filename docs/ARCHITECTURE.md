@@ -63,6 +63,7 @@ authority), and `structures.js`'s `VoxelBuilder` (the shared voxel mesher).
 | `energy.js` | wind turbines, substation, pylons & cables | noise, planet, structures |
 | `sky.js` | atmosphere, stars, sun/moon, aurora | noise |
 | `postfx.js` | bloom, god rays | three/addons |
+| `quality.js` | the quality ladder and the FPS governor that walks it | three |
 | `main.js` | composition: scene, camera modes, settlers, UI, the frame loop | all of the above |
 
 Determinism is a feature: all randomness flows from seeded hashes so every
@@ -88,6 +89,34 @@ clause, exercised deliberately):
 3. **Shaders are foreign country.** GLSL blocks follow GLSL idiom, not ours.
 4. **Per-frame code allocates nothing.** Reuse module-level scratch objects
    (`_v1`, `_q`); no `new` inside `animate()`'s call tree.
+
+## Holding the frame rate
+
+`quality.js` owns every setting whose cost the picture can trade away, as one
+ordered ladder from `ultra` to `floor`. Frame rate is the only input — never a
+GPU string or a device table, because the question is not what this machine is
+but whether it is keeping up *right now*, at this window size, with this many
+settlers on screen.
+
+Two rules govern the ladder's shape. Cheapest sacrifices come first, so the
+early steps (soft shadows → PCF, full-res bloom → half) are ones nobody can
+see. And internal resolution rides down *with* the quality knobs only as far as
+50%; going below that is reserved for the last two tiers, after every other
+knob is already off, because a soft picture is a worse failure than a plain one.
+
+The governor is deliberately reluctant, because a dropped frame is not a trend.
+Four mechanisms keep it from chasing noise: a **median** filter (throws away the
+worst frame in the window), **dwell** (a threshold must hold for seconds, and
+climbing back up takes longer than falling), a **cooldown** after each change
+(the change itself costs a hitch — don't measure during it), and a **regret
+ratchet** (a tier we climbed into and fell straight back out of becomes
+progressively harder to attempt again, so oscillation damps out). Only a
+sustained sub-24fps reading skips ahead, two tiers at a time.
+
+The dev panel exposes every knob as a slider. Under `auto` they are a live
+readout of what the governor is doing; switch it off and they become the
+controls, which is the fastest way to find out what a given effect actually
+costs on real hardware.
 
 House rules on top: plain JS (no TypeScript — the browser runs what we
 commit), `camelCase` functions, `SCREAMING_CASE` for tuning constants,
